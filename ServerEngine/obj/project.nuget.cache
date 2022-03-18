@@ -1,0 +1,18 @@
+{
+  "version": 2,
+  "dgSpecHash": "Ic8HujGDb1KbFm5sqZ0j57Y5qF5ztLpNy6o9wRBCFcJ2k7qt6gLHdMlpkuGfYD+K4LktIFfB1PW8qWmw5XgYGQ==",
+  "success": true,
+  "projectFilePath": "D:\\visual studio 2019\\C#\\Server\\MyGameServer(.NetCore)\\MyGameServer\\ServerEngine\\ServerEngine.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\c9368\\.nuget\\packages\\log4net\\2.0.14\\log4net.2.0.14.nupkg.sha512",
+    "C:\\Users\\c9368\\.nuget\\packages\\microsoft.netcore.platforms\\2.0.0\\microsoft.netcore.platforms.2.0.0.nupkg.sha512",
+    "C:\\Users\\c9368\\.nuget\\packages\\protobuf-net\\3.0.101\\protobuf-net.3.0.101.nupkg.sha512",
+    "C:\\Users\\c9368\\.nuget\\packages\\protobuf-net.core\\3.0.101\\protobuf-net.core.3.0.101.nupkg.sha512",
+    "C:\\Users\\c9368\\.nuget\\packages\\system.configuration.configurationmanager\\4.5.0\\system.configuration.configurationmanager.4.5.0.nupkg.sha512",
+    "C:\\Users\\c9368\\.nuget\\packages\\system.security.accesscontrol\\4.5.0\\system.security.accesscontrol.4.5.0.nupkg.sha512",
+    "C:\\Users\\c9368\\.nuget\\packages\\system.security.cryptography.protecteddata\\4.5.0\\system.security.cryptography.protecteddata.4.5.0.nupkg.sha512",
+    "C:\\Users\\c9368\\.nuget\\packages\\system.security.permissions\\4.5.0\\system.security.permissions.4.5.0.nupkg.sha512",
+    "C:\\Users\\c9368\\.nuget\\packages\\system.security.principal.windows\\4.5.0\\system.security.principal.windows.4.5.0.nupkg.sha512"
+  ],
+  "logs": []
+}

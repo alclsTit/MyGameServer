@@ -1,0 +1,13 @@
+D:\visual studio 2019\C#\Server\MyGameServer(.NetCore)\MyGameServer\ServerEngine\bin\Release\net6.0\ServerEngine.deps.json
+D:\visual studio 2019\C#\Server\MyGameServer(.NetCore)\MyGameServer\ServerEngine\bin\Release\net6.0\ServerEngine.dll
+D:\visual studio 2019\C#\Server\MyGameServer(.NetCore)\MyGameServer\ServerEngine\bin\Release\net6.0\ref\ServerEngine.dll
+D:\visual studio 2019\C#\Server\MyGameServer(.NetCore)\MyGameServer\ServerEngine\bin\Release\net6.0\ServerEngine.pdb
+D:\visual studio 2019\C#\Server\MyGameServer(.NetCore)\MyGameServer\ServerEngine\obj\Release\net6.0\ServerEngine.GeneratedMSBuildEditorConfig.editorconfig
+D:\visual studio 2019\C#\Server\MyGameServer(.NetCore)\MyGameServer\ServerEngine\obj\Release\net6.0\ServerEngine.AssemblyInfoInputs.cache
+D:\visual studio 2019\C#\Server\MyGameServer(.NetCore)\MyGameServer\ServerEngine\obj\Release\net6.0\ServerEngine.AssemblyInfo.cs
+D:\visual studio 2019\C#\Server\MyGameServer(.NetCore)\MyGameServer\ServerEngine\obj\Release\net6.0\ServerEngine.csproj.CoreCompileInputs.cache
+D:\visual studio 2019\C#\Server\MyGameServer(.NetCore)\MyGameServer\ServerEngine\obj\Release\net6.0\ServerEngine.dll
+D:\visual studio 2019\C#\Server\MyGameServer(.NetCore)\MyGameServer\ServerEngine\obj\Release\net6.0\ref\ServerEngine.dll
+D:\visual studio 2019\C#\Server\MyGameServer(.NetCore)\MyGameServer\ServerEngine\obj\Release\net6.0\ServerEngine.pdb
+D:\visual studio 2019\C#\Server\MyGameServer(.NetCore)\MyGameServer\ServerEngine\obj\Release\net6.0\ServerEngine.csproj.AssemblyReference.cache
+D:\visual studio 2019\C#\Server\MyGameServer(.NetCore)\MyGameServer\ServerEngine\bin\Release\net6.0\log4net.config

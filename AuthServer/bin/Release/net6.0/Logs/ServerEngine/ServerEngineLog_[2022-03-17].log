@@ -1,0 +1,8 @@
+2022-03-17 22:50:56 [AuthServer] [DEBUG] - TCPConnecter [192.168.0.12:8901] Connected 
+2022-03-17 22:50:58 [9] [ERROR] - Exception[Error] in TCPConnecter.OnConnectCompleted - [SocketError = ConnectionRefused] 
+2022-03-17 22:51:35 [AuthServer] [DEBUG] - TCPConnecter [192.168.0.12:8901] Connected 
+2022-03-17 22:51:35 [8] [DEBUG] - Connect Completed!!! 
+2022-03-17 22:51:35 [5] [ERROR] - Exception[Error] in handler_notify_socket_connected_cs2auth.OnErrorHandler -  
+System.OverflowException: Arithmetic operation resulted in an overflow.
+   at ServerEngine.Network.Message.PacketParser.BufferToMessage[TPacket](ArraySegment`1 buffer) in D:\visual studio 2019\C#\Server\MyGameServer(.NetCore)\MyGameServer\ServerEngine\Network\Message\PacketParser.cs:line 79
+   at AuthServer.Handler.handler_notify_socket_connected_cs2auth.Process(ArraySegment`1 buffer) in D:\visual studio 2019\C#\Server\MyGameServer(.NetCore)\MyGameServer\AuthServer\Handler\handler_socket_session.cs:line 25

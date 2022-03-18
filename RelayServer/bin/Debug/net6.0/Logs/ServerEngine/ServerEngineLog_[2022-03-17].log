@@ -1,0 +1,4 @@
+2022-03-17 22:50:39 [LocalHost1] [DEBUG] - TCPListener [Listen(192.168.0.12:8900)] Connected 
+2022-03-17 22:50:39 [AuthServer] [DEBUG] - TCPListener [Listen(192.168.0.12:8901)] Connected 
+2022-03-17 22:50:39 [AuthServer] [DEBUG] - TCPListener [Accept] Started 
+2022-03-17 22:50:39 [LocalHost1] [DEBUG] - TCPListener [Accept] Started 

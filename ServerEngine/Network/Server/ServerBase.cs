@@ -1,0 +1,440 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using System.Net;
+using System.Threading;
+
+using ServerEngine.Log;
+using ServerEngine.Config;
+using ServerEngine.Network.SystemLib;
+using ServerEngine.Common;
+using ServerEngine.Network.ServerSession;
+
+namespace ServerEngine.Network.Server
+{
+    /// <summary>
+    /// 외부에서 가져온 서버 데이터 세팅, 여러개의 서버모듈이 작동되는 베이스 서버 클래스 
+    /// * 사용자가 최대한으로 편리하게 사용할 수 있도록 사용자 접근 인터페이스와 구현부는 분리한다
+    /// </summary>
+    public abstract class ServerBase : IServerBase
+    {
+        /// <summary>
+        /// ThreadPool 세팅 플래그 (한 번만 진행)
+        /// </summary>
+        private static bool msInitThreadPoolFlag = false;
+
+        /// <summary>
+        /// logger 관련 logFactory(생성자) 및 logger(구체적 생성 객체)
+        /// </summary>
+        public ILogFactory logFactory { get; private set; }
+        public Logger logger { get; private set; }
+
+        /// <summary>
+        /// 서버 Listen 관련 옵션관리 컨테이너
+        /// </summary>
+        public List<IListenInfo> mListenInfoList { get; private set; } = new List<IListenInfo>();
+
+        /// <summary>
+        /// 문자 인코딩 방식(utf-8, utf-16...)
+        /// </summary>
+        public Encoding mTextEncoding { get; protected set; }
+
+        /// <summary>
+        /// 서버 상태
+        /// </summary>
+        public int mServerState = ServerState.NotInitialized;
+
+        /// <summary>
+        /// 서버 이름(RelayServer, AuthServer...)
+        /// </summary>
+        public string name { get; protected set; }
+
+        /// <summary>
+        /// 서버 응용프로그램 위에서 작동되는 여러 서버모듈(클라이언트와 실제 통신 진행)
+        /// </summary>
+        protected List<IServerModule> mServerModuleList;
+
+        public virtual bool Initialize(string nameOfConsoleTitle, string serverName, ILogFactory logFactory)
+        {
+            //.NetCore는 .NetFramework와는 다르게 assemblyinfo 파일을 자동으로 구성.전체 구성은 csproj에서... 별도로 log4net 수동으로 로드진행 
+            var logRepository = log4net.LogManager.GetRepository(System.Reflection.Assembly.GetEntryAssembly());
+            log4net.Config.XmlConfigurator.Configure(logRepository, new FileInfo("log4net.config"));
+
+            this.logFactory = logFactory ?? new ConsoleLoggerFactory();
+            logger = this.logFactory.GetLogger(nameof(ServerBase), nameOfConsoleTitle);
+
+            if (logger == null)
+                return false;
+
+            name = serverName;
+
+            Message.PacketProcessorManager.Instance.Initialize(logger);
+            
+            return true;
+        }
+
+        public bool ChangeState(int oldState, int newState)
+        {
+            var curState = mServerState;
+            if (curState == newState)
+                return true;
+
+            if (oldState == Interlocked.Exchange(ref mServerState, newState))
+                return true;
+
+            return false;
+        }
+
+        /// <summary>
+        /// 어플리케이션 구동에 필요한 Setup 작업 중 공통작업 구현, 기타 필요한 것들은 파생클래스에서 구현
+        /// </summary>
+        /// <typeparam name="TServerModule"></typeparam>
+        /// <typeparam name="TServerInfo"></typeparam>
+        /// <typeparam name="TNetworkSystem"></typeparam>
+        /// <param name="listenInfo"></param>
+        /// <param name="config"></param>
+        /// <param name="creater"></param>
+        /// <returns></returns>
+        public virtual bool Setup<TServerModule, TServerInfo, TNetworkSystem>(List<IListenInfo> listenInfo, TServerInfo config, Func<ServerSession.Session> creater)
+            where TServerModule : ServerModuleBase, new()
+            where TServerInfo : ServerConfig, new()
+            where TNetworkSystem : NetworkSystemBase, new()
+        {
+            // 1. Config 파일 세팅
+            if (!SetupServerConfig(config))
+            {
+                logger.Error(this.ClassName(), this.MethodName(), "Fail to setup [SetupServerConfig]!!!");
+                return false;
+            }
+
+            // 2. Listener 세팅
+            if (!SetupListener(listenInfo))
+            {
+                logger.Error(this.ClassName(), this.MethodName(), "Fail to setup [SetupListener]!!!");
+                return false;
+            }
+
+            // 3. ServerModule 세팅
+            if (!SetupSocketServer<TServerModule, TServerInfo, TNetworkSystem>(config, creater))
+            {
+                logger.Error(this.ClassName(), this.MethodName(), "Fail to setup [SetupSocketServer]!!!");
+                return false;
+            }
+
+            // 4. 패킷 송수신(Accept, Connect) 관련 Thread 세팅
+            if (!SetupThreads())
+            {
+                logger.Error(this.ClassName(), this.MethodName(), "Fail to setup [SetupThreads]!!!");
+                return false;
+            }
+
+            // 5. Send 패킷관련 Chunk 값 세팅
+            Message.SendMessageHelper.Initialize(config.sendBufferSize);
+
+
+            return true;
+        }
+
+        /// <summary>
+        /// 어플리케이션 구동에 필요한 Setup 작업 중 공통작업 구현, 기타 필요한 것들은 파생클래스에서 구현
+        /// </summary>
+        /// <typeparam name="TServerModule"></typeparam>
+        /// <typeparam name="TServerInfo"></typeparam>
+        /// <typeparam name="TNetworkSystem"></typeparam>
+        /// <param name="ip"></param>
+        /// <param name="port"></param>
+        /// <param name="serverName"></param>
+        /// <param name="config"></param>
+        /// <param name="creater"></param>
+        /// <param name="backlog"></param>
+        /// <param name="nodelay"></param>
+        /// <returns></returns>
+        public virtual bool Setup<TServerModule, TServerInfo, TNetworkSystem>(string ip, ushort port, string serverName, TServerInfo config, Func<ServerSession.Session> creater, int backlog = ServerDefaultOption.backlog, bool nodelay = true)
+            where TServerModule : ServerModuleBase, new()
+            where TServerInfo : ServerConfig, new()
+            where TNetworkSystem : NetworkSystemBase, new()
+        {
+            // 1. Config 파일 세팅
+            if (!SetupServerConfig(config))
+            {
+                logger.Error(this.ClassName(), this.MethodName(), "Fail to setup [SetupServerConfig]!!!");
+                return false;
+            }
+
+            // 2. Listener 세팅
+            if (!SetupListener(ip, port, serverName, backlog, nodelay))
+            {
+                logger.Error(this.ClassName(), this.MethodName(), "Fail to setup [SetupListener]!!!");
+                return false;
+            }
+
+            // 3. ServerModule 세팅
+            if (!SetupSocketServer<TServerModule, TServerInfo, TNetworkSystem>(config, creater))
+            {
+                logger.Error(this.ClassName(), this.MethodName(), "Fail to setup [SetupSocketServer]!!!");
+                return false;
+            }
+
+            // 4. 패킷 송수신(Accept, Connect) 관련 Thread 세팅
+            if (!SetupThreads())
+            {
+                logger.Error(this.ClassName(), this.MethodName(), "Fail to setup [SetupThreads]!!!");
+                return false;
+            }
+
+            // 5. Send 패킷관련 Chunk 값 세팅
+            Message.SendMessageHelper.Initialize(config.sendBufferSize);
+
+            return true;
+        }
+
+        /// <summary>
+        /// Setup 작업이후 공통적으로 진행되는 후작업 (상태체크..)
+        /// </summary>
+        /// <returns></returns>
+        protected bool SetupAfterCheck()
+        {
+            var oldState = ServerState.Initialized;
+            if (!ChangeState(oldState, ServerState.SetupFinished))
+            {
+                logger.Error(this.ClassName(), this.MethodName(), $"State is [{oldState}]. It can be [SetupFinished] when state is [Initialized]");
+                return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// 어플리케이션 구동에 필요한 Start 추가 작업은 파생클래스에서 사용자가 커스터마이징해서 사용
+        /// * 이곳에서는 상태변경 및 Thread 구동
+        /// </summary>
+        public virtual void Start()
+        {
+            mServerState = ServerState.Running;
+
+            ThreadManager.StartThreadsAsync();
+        }
+
+        /// <summary>
+        /// 서버 객체 당 공통적으로 config 옵션 세팅이 필요한 대상 세팅 진행
+        /// 모든 서버는 config 파일을 통해서 서버 옵션이 필수적으로 세팅되어야한다(강제 하는게 맞는가?)
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="item"></param>
+        /// <returns></returns>
+        private bool SetupServerConfig<TServerInfo>(TServerInfo config) 
+            where TServerInfo : ServerConfig
+        {
+            if (config == null)
+                throw new ArgumentNullException(nameof(config));
+
+            mTextEncoding = string.IsNullOrEmpty(config.encoding) ? Encoding.Default : Encoding.GetEncoding(config.encoding);
+            
+            if (config.controlThreadPoolCount)
+            {
+                if (!msInitThreadPoolFlag)
+                {
+                    if (ThreadPoolEx.ResetThreadPoolInfo(config.minWorkThreadCount,
+                                                         config.maxWorkThreadCount,
+                                                         config.minIOThreadCount,
+                                                         config.maxIOThreadCount))
+                    {
+                        msInitThreadPoolFlag = true;
+                    }
+                    else
+                    {
+                        logger.Warn(this.ClassName(), this.MethodName(), "Fail to set [ThreadPoolEx.ResetThreadPoolInfo], working default ThreadPool count!!!");
+                    }
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// 현재 listenInfo 중 에 새롭게 추가하려는 listen 정보가 이미 존재하는 경우 체크 
+        /// </summary>
+        /// <param name="listenInfo"></param>
+        /// <returns></returns>
+        private bool CheckAlreadyHaveListener(IListenInfo listenInfo)
+        {
+            return mListenInfoList.Exists(oldListener => oldListener.ip.Equals(listenInfo.ip, StringComparison.OrdinalIgnoreCase) && 
+                                                         oldListener.port == listenInfo.port);
+        }
+
+        /// <summary>
+        /// 외부에서 config 파일을 바탕으로 세팅된 데이터를 가져와 Listener 세팅 작업 진행
+        /// </summary>
+        /// <param name="listenInfoList"></param>
+        /// <returns></returns>
+        /// <exception cref="ArgumentNullException"></exception>
+        private bool SetupListener(List<IListenInfo> listenInfoList)
+        {
+            if (listenInfoList == null)
+                throw new ArgumentNullException(nameof(listenInfoList));
+
+            if (listenInfoList.Count <= 0)
+                return false;
+
+            foreach (var listenInfo in listenInfoList)
+            {
+                if (string.IsNullOrEmpty(listenInfo.ip))
+                {
+                    logger.Error(this.ClassName(), this.MethodName(), $"Fail to set IP - [{listenInfo.serverName}] is null!!!");
+                    return false;
+                }
+
+                if (listenInfo.port <= 0)
+                {
+                    logger.Error(this.ClassName(), this.MethodName(), $"Fail to set PORT - [{listenInfo.serverName}] is zero!!!");
+                    return false;
+                }
+            }
+
+            mListenInfoList = listenInfoList;
+            return true;
+        }
+
+        /// <summary>
+        /// 외부에서 config 파일을 바탕으로 세팅된 데이터를 가져와 Listener 세팅 작업 진행
+        /// </summary>
+        /// <param name="ip"></param>
+        /// <param name="port"></param>
+        /// <param name="serverName"></param>
+        /// <param name="backlog"></param>
+        /// <param name="nodelay"></param>
+        /// <returns></returns>
+        /// <exception cref="ArgumentNullException"></exception>
+        /// <exception cref="ArgumentException"></exception>
+        private bool SetupListener(string ip, ushort port, string serverName, int backlog = ServerDefaultOption.backlog, bool nodelay = true)
+        {
+            if (string.IsNullOrEmpty(ip))
+                throw new ArgumentNullException("IP is null");
+
+            if (port <= 0)
+                throw new ArgumentException("PORT is zero");
+
+            if (string.IsNullOrEmpty(serverName))
+                throw new ArgumentNullException(nameof(serverName));
+
+            IListenInfo listenInfo = new ListenConfig(ip, port, serverName, backlog, nodelay);
+
+            mListenInfoList = mListenInfoList ?? new List<IListenInfo>();
+            if (mListenInfoList.Count > 0)
+            {
+                if (!CheckAlreadyHaveListener(listenInfo))
+                {
+                    mListenInfoList.Add(listenInfo);
+                }
+            }
+            else
+            {
+                mListenInfoList.Add(listenInfo);
+            }
+
+            return true;
+        }
+
+
+        /// <summary>
+        /// 서버모듈에서 사용되는 정보를 세팅한다(*서버모듈과 ServerBase는 1:1관계)
+        /// </summary>
+        /// <typeparam name="TServerModule"> 생성할 서버모듈 타입</typeparam>
+        /// <typeparam name="TServerInfo">   서버모듈에서 사용. 초기화에 사용될 Config 파일 타입</typeparam>
+        /// <typeparam name="TNetworkSystem">서버모듈에서 사용. 초기화에 사용될 통신(accept/connect)객체 </typeparam>
+        /// <param name="creater"></param>
+        /// <returns>true/false(mServerModuleList의 원소는 최소 1개 이상 존재해야한다)</returns>
+        /// <exception cref="ArgumentNullException"></exception>
+        private bool SetupSocketServer<TServerModule, TServerInfo, TNetworkSystem>(TServerInfo config, Func<Session> creater)
+            where TServerModule : ServerModuleBase, new()
+            where TServerInfo : ServerConfig, new()
+            where TNetworkSystem : NetworkSystemBase, new()
+        {
+           
+            mServerModuleList = mServerModuleList ?? new List<IServerModule>();
+
+            for(int idx = 0; idx < mListenInfoList.Count; ++idx)
+            {
+                var newModule = new TServerModule();
+                newModule.Initialize(mListenInfoList, mListenInfoList[idx], config, new TNetworkSystem(), logger, creater);
+                mServerModuleList.Add(newModule);
+            }
+
+            return mServerModuleList.Count > 0;
+        }
+
+        /// <summary>
+        /// 세션 매니저 세팅. 세션 매니저는 필수 옵션이 아니기 때문에 세팅관련 메서드를 따로 빼두었다
+        /// </summary>
+        /// <typeparam name="TSessionManager"></typeparam>
+        public void SetupSessionManager<TSessionManager>() where TSessionManager : ISessionManager, new()
+        {
+            foreach(var module in mServerModuleList)
+            {
+                module.InitializeSessionManager(new TSessionManager());
+            }
+        }
+
+        /// <summary>
+        /// 패킷 송수신(accept, connect) 관련 Thread 세팅
+        /// </summary>
+        protected bool SetupThreads()
+        {
+            foreach (var module in mServerModuleList)
+            {
+                if (ThreadManager.GetAvailableCount > 0)
+                {
+                    ThreadManager.AddThread(module.name, () => ModuleThreadStart(module), true);
+                }
+                else
+                {
+                    // 필요한 ip, port 대역대의 서버가 모두 세팅이 되지 않는한 모두 시작하지 않는다
+                    logger.Error(this.ClassName(), this.MethodName(), "ThreadManager' number of ThreadCount is max!!!");
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// ServerModule 구동시 진행되는 작업. 등록한 리스너마다 스레드가 1씩 할당되어 accept, connect 및 패킷 송수신 진행
+        /// </summary>
+        /// <param name="module"></param>
+        private void ModuleThreadStart(IServerModule module)
+        {
+            // ServerModule 상태변경 
+            var oldState = ServerState.Initialized;
+            if (!ChangeState(oldState, ServerState.Running))
+            {
+                logger.Error(this.ClassName(), this.MethodName(), $"State is [{oldState}]. It can be [Running] when state is [Initialized]");
+                return;
+            }
+
+            if (!module.StartOnce())
+            {
+                logger.Error(this.ClassName(), this.MethodName(), "Fail to set StartOnce work!!!");
+                return;
+            }
+
+            // ServerModule 구동 
+            if (!module.Start())
+            {
+                // 구동 중인 ServerModule에 문제가 생겼을 때 진입. Stop 및 후처리 진행
+                // NetworkSystem.Stop -> ServerModule.Stop -> Server.Stop
+                mServerState = ServerState.NotStarted;
+                module.Stop();
+
+                var ipEndPoint = module.ipEndPoint;
+                logger.Error(this.ClassName(), this.MethodName(), $"Server[{ipEndPoint.Address}:{ipEndPoint.Port}] can't be started!!!");               
+            }
+        }
+
+        public virtual void Stop()
+        {
+
+        }
+    }
+}

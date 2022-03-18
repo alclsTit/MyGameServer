@@ -1,0 +1,218 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using System.Threading;
+using System.Collections.Concurrent;
+using System.Net;
+
+namespace ServerEngine.Network.ServerSession
+{
+    public interface ISessionManager
+    {
+        string sessionID { get; }
+
+        int numberOfMaxConnect { get; }
+
+        void Initialize(int maxConnect);
+
+        void AddSession(Session session);
+
+        void RemoveSession(string id);
+
+        void Close(string id);
+
+        bool CheckConnectionMax();
+
+        bool CheckMultiConnected(EndPoint endPoint);
+    }
+
+    /// <summary>
+    /// 세션 관리 매니저
+    /// 1. 전체 세션(auth, logic...) 관리 
+    /// </summary>
+    public abstract class SessionManagerBase : ISessionManager
+    {
+        public string sessionID { get; private set; }
+
+        public int numberOfMaxConnect { get; private set; }
+
+        private ConcurrentDictionary<string, Session> mContainer = new ConcurrentDictionary<string, Session>();
+
+        public int GetSessionCount() => mContainer.Count;
+
+        protected object mLockObject = new object();
+
+        protected SessionManagerBase() { }
+
+        public virtual void Initialize(int maxConnect)
+        {
+            numberOfMaxConnect = maxConnect;
+        }
+
+        /// <summary>
+        /// 파라미터로 받은 세션아이디에 해당하는 항목이 존재하는지 확인
+        /// </summary>
+        /// <param name="id"></param>
+        /// <returns></returns>
+        public bool IsExist(string id)
+        {
+            if (string.IsNullOrEmpty(id))
+                return false;
+
+            if (mContainer.ContainsKey(id))
+                return true;
+
+            return false;
+        }
+
+        /// <summary>
+        /// 세션추가 가능여부 확인
+        /// </summary>
+        /// <param name="session"></param>
+        /// <returns></returns>
+        private bool TryAddSession(Session session)
+        {
+            var id = session.mSessionID;
+
+            if (IsExist(id))
+                return false;
+
+            if (mContainer.TryAdd(id, session))
+                return true;
+            else
+                return false;
+        }
+        
+        /// <summary>
+        /// 세션관리자에서 관리하도록 새로운 세션 추가
+        /// </summary>
+        /// <param name="session"></param>
+        /// <exception cref="Exception"></exception>
+        public void AddSession(Session session)
+        {
+            if (session == null)
+                throw new ArgumentNullException(nameof(session));
+
+            if (!TryAddSession(session))
+                throw new Exception($"Fail to add session[{session.mSessionID}]");
+        }
+
+        /// <summary>
+        /// 세션삭제 가능여부 확인
+        /// </summary>
+        /// <param name="id"></param>
+        /// <returns></returns>
+        private bool TryRemoveSession(string id)
+        {
+            if (mContainer.TryRemove(id, out var session))
+                return true;
+            else
+                return false;
+        }
+
+        /// <summary>
+        /// 세션관리자에서 관리하는 특정 아이디에 해당하는 세션 삭제
+        /// </summary>
+        /// <param name="id"></param>
+        /// <exception cref="Exception"></exception>
+        public void RemoveSession(string id)
+        {
+            if (string.IsNullOrEmpty(id))
+                throw new ArgumentNullException(nameof(id));
+
+            if (!TryRemoveSession(id))
+                throw new Exception($"Fail to remove session[{id}]");
+        }
+
+        /// <summary>
+        /// 세션매니저에서 관리하는 최대의 세션 Connection 수를 넘어갔는지 확인
+        /// * 만약, 최대관리 가능한 세션수를 넘었을 때, 인원제한이 걸렸다는 정보 전달 및 접속불가로 처리
+        /// </summary>
+        /// <returns></returns>
+        public bool CheckConnectionMax()
+        {
+            var maxConnect = numberOfMaxConnect;
+            return maxConnect <= GetSessionCount() ? true : false;
+        }
+
+        /// <summary>
+        /// 세션관리자에 파라미터로 넘겨받은 세션아이디에 해당하는 대상이 있는지 확인
+        /// </summary>
+        /// <param name="id"></param>
+        /// <returns></returns>
+        public Session GetSession(string id)
+        {
+            if (string.IsNullOrEmpty(id))
+                return null;
+
+            if (mContainer.TryGetValue(id, out var session))
+                return session;
+           
+            return null;
+        }
+
+        /// <summary>
+        /// 세션관리 컨테이너에서 모든 대상 시퀀스로 반환
+        /// </summary>
+        /// <returns></returns>
+        public IEnumerable<Session> GetEnumerator() 
+        {
+            lock(mLockObject)
+            {
+                using(var sequence = mContainer.GetEnumerator())
+                {
+                    while (sequence.MoveNext())
+                        yield return sequence.Current.Value;
+                }
+            }
+        }
+
+        /// <summary>
+        /// 세션관리 컨테이너에서 조건을 만족하는 대상에 대한 시퀀스 반환
+        /// </summary>
+        /// <param name="predicate"></param>
+        /// <returns></returns>
+        public IEnumerable<Session> GetAllSessions(Func<Session, bool> predicate)  
+        {
+            lock(mLockObject)
+            {
+                using(var sequence = mContainer.GetEnumerator())
+                {
+                    while(sequence.MoveNext())
+                    {
+                        if (predicate(sequence.Current.Value))
+                            yield return sequence.Current.Value;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// 현재 연결된 서버 세션과 동일한 세션을 연결하고자 요청하는지 체크
+        /// </summary>
+        /// <param name="predicate"></param>
+        /// <returns>현재 세션매니저에 동일한 ip, port를 가진 대상이 있는 경우 True 반환, 그렇지 않으면 false 반환</returns>
+        public bool CheckMultiConnected(EndPoint endPoint)
+        {
+            lock(mLockObject)
+            {
+                var ipEndPoint = (IPEndPoint)endPoint;
+                return mContainer.Values.Where((item) => { return item.mLocalIPEndPoint.Address.ToString() == ipEndPoint.Address.ToString() && item.mLocalIPEndPoint.Port == ipEndPoint.Port; }).ToList().Count > 0;
+            }
+        }
+
+        public void Close(string id)
+        {
+            if (!IsExist(id))
+                return;
+
+            RemoveSession(id);
+        }
+       
+    }
+
+
+    
+}

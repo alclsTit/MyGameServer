@@ -1,0 +1,9 @@
+2022-03-18 00:04:13 [5] [ERROR] - Exception[Error] in handler_notify_socket_connected_cs2auth.OnErrorHandler -  
+System.OverflowException: Arithmetic operation resulted in an overflow.
+   at ServerEngine.Network.Message.PacketParser.BufferToMessage[TPacket](ArraySegment`1 buffer) in D:\visual studio 2019\C#\Server\MyGameServer(.NetCore)\MyGameServer\ServerEngine\Network\Message\PacketParser.cs:line 79
+   at AuthServer.Handler.handler_notify_socket_connected_cs2auth.Process(ArraySegment`1 buffer) in D:\visual studio 2019\C#\Server\MyGameServer(.NetCore)\MyGameServer\AuthServer\Handler\handler_socket_session.cs:line 25
+2022-03-18 00:04:26 [8] [ERROR] - Exception[Error] in AuthSession.OnRecvCompleted - [SocketError = ConnectionReset, BytesTransferred = 0] 
+2022-03-18 02:11:51 [7] [ERROR] - [PACKET DELAY(0)] Packet delay was occured!!! 
+2022-03-18 02:12:42 [4] [ERROR] - [PACKET DELAY(0)] Packet delay was occured!!! 
+2022-03-18 02:13:15 [4] [ERROR] - [PACKET DELAY(0.0054477)] Packet delay was occured!!! 
+2022-03-18 02:13:31 [7] [ERROR] - [PACKET DELAY(0.0042246)] Packet delay was occured!!! 

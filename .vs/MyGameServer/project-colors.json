@@ -1,0 +1,31 @@
+{
+  "Version": 1,
+  "ProjectMap": {
+    "bbe89786-93aa-4259-832c-aec4eb789730": {
+      "ProjectGuid": "bbe89786-93aa-4259-832c-aec4eb789730",
+      "DisplayName": "ServerEngine",
+      "ColorIndex": 0
+    },
+    "a2fe74e1-b743-11d0-ae1a-00a0c90fffc3": {
+      "ProjectGuid": "a2fe74e1-b743-11d0-ae1a-00a0c90fffc3",
+      "DisplayName": "기타 파일",
+      "ColorIndex": -1
+    },
+    "f275f20d-eb3f-460f-81a2-0a5d96435888": {
+      "ProjectGuid": "f275f20d-eb3f-460f-81a2-0a5d96435888",
+      "DisplayName": "RelayServer",
+      "ColorIndex": 1
+    },
+    "4ae07657-291e-479b-b648-654a4c47747d": {
+      "ProjectGuid": "4ae07657-291e-479b-b648-654a4c47747d",
+      "DisplayName": "AuthServer",
+      "ColorIndex": 2
+    },
+    "cad7e7d8-b359-42c2-af4b-303d24d3f3ca": {
+      "ProjectGuid": "cad7e7d8-b359-42c2-af4b-303d24d3f3ca",
+      "DisplayName": "GameClient",
+      "ColorIndex": 3
+    }
+  },
+  "NextColorIndex": 4
+}
