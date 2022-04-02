@@ -10,6 +10,11 @@ using ServerEngine.Common;
 
 namespace ServerEngine.Config
 {
+    /// <summary>
+    /// Config 관련 로드작업에 사용되는 추상클래스
+    /// </summary>
+    /// <typeparam name="Class"></typeparam>
+    /// <typeparam name="ConfigInfo"></typeparam>
     public abstract class ConfigLoaderBase<Class, ConfigInfo> : IConfigLoader<ConfigInfo>
         where Class : ConfigLoaderBase<Class, ConfigInfo> 
         where ConfigInfo : ServerConfig, new()
@@ -165,6 +170,16 @@ namespace ServerEngine.Config
             {
                 return false;
             }
+        }
+
+        public virtual bool LoadMssqlConfig(string dbHostName, ushort port = 1433, bool ipv4 = true)
+        {
+            return true;
+        }
+
+        public virtual bool LoadMysqlConfig(string dbHostName, ushort port = 3306, bool ipv4 = true)
+        {
+            return true;
         }
     }
 }

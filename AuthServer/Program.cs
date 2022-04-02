@@ -34,26 +34,34 @@ namespace AuthServer
                 {
                     if (ConfigLoader.Instance.LoadListeners(listenInfoList))
                     {
-                        if (!authServer.Setup<ServerConnectModule, AuthServerConfig, TCPConnecter>(listenInfoList, config, () => new AuthSession()))
+                        if (ConfigLoader.Instance.LoadMssqlConfig("DBServer") /*&& ConfigLoader.Instance.LoadMysqlConfig("DBServer")*/)
                         {
-                            authServer.logger.Error($"Exception in Program.Main - Fail to [setup Server]");
-                            return;
+                            if (!authServer.Setup<ServerConnectModule, AuthServerConfig, TCPConnecter>(listenInfoList, config, () => new AuthSession()))
+                            {
+                                authServer.logger.Error($"Exception in Program.Main - Fail to [setup Server]");
+                                return;
+                            }
+                            else
+                            {
+                                authServer.SetupSessionManager<ServerSessionManager>();
+                                authServer.Start();
+                            }
                         }
                         else
                         {
-                            authServer.SetupSessionManager<ServerSessionManager>();
-                            authServer.Start();
+                            authServer.logger.Error($"Exception in Program.Main - Fail to [Load DBConfig]");
+                            return;
                         }
                     }
                     else
                     {
-                        authServer.logger.Error("$Exception in Program.Main - Fail to [load ServerListeners]");
+                        authServer.logger.Error($"Exception in Program.Main - Fail to [Load ServerListeners]");
                         return;
                     }
                 }
                 else
                 {
-                    authServer.logger.Error("$Exception in Program.Main - Fail to [load Config]");
+                    authServer.logger.Error($"Exception in Program.Main - Fail to [Load Config]");
                     return;
                 }
 

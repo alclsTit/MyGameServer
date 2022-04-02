@@ -32,26 +32,34 @@ namespace RelayServer
                 {
                     if (ConfigLoader.Instance.LoadListeners(listenInfoList))
                     {
-                        if (!csServer.Setup<ServerAcceptModule, RelayServerConfig, TCPListener>(listenInfoList, config, () => new RelaySession()))
+                        if (ConfigLoader.Instance.LoadMssqlConfig("DBServer") /*&& ConfigLoader.Instance.LoadMysqlConfig("DBServer")*/)
                         {
-                            csServer.logger.Error($"Exception in Program.Main - Fail to [setup Server]");
-                            return;
+                            if (!csServer.Setup<ServerAcceptModule, RelayServerConfig, TCPListener>(listenInfoList, config, () => new RelaySession()))
+                            {
+                                csServer.logger.Error($"Exception in Program.Main - Fail to [setup Server]");
+                                return;
+                            }
+                            else
+                            {
+                                csServer.SetupSessionManager<ServerSessionManager>();
+                                csServer.Start();
+                            }
                         }
                         else
                         {
-                            csServer.SetupSessionManager<ServerSessionManager>();
-                            csServer.Start();
+                            csServer.logger.Error($"Exception in Program.Main - Fail to [Load DBConfig]");
+                            return;
                         }
                     }
                     else
                     {
-                        csServer.logger.Error("$Exception in Program.Main - Fail to [load ServerListeners]");
+                        csServer.logger.Error($"Exception in Program.Main - Fail to [Load ServerListeners]");
                         return;
                     }
                 }
                 else
                 {
-                    csServer.logger.Error("$Exception in Program.Main - Fail to [load Config]");
+                    csServer.logger.Error($"Exception in Program.Main - Fail to [Load Config]");
                     return;
                 }
 
