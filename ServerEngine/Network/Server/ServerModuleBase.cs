@@ -206,8 +206,9 @@ namespace ServerEngine.Network.Server
                 return;
             }
 
-            session.ClearAllSocketAsyncEvent();
+            session.Closed -= OnSessionClosed;
 
+            session.ClearAllSocketAsyncEvent();
             mRecvEventPool.Push(session.mRecvEvent);
             mSendEventPool.Push(session.mSendEvent);
 

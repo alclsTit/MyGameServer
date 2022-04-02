@@ -94,12 +94,20 @@ namespace ServerEngine.Network.SystemLib
 
         private void StartConnect(SocketAsyncEventArgs e)
         {
-            Socket socket = e.UserToken as Socket;
-            if (socket != null)
+            try
             {
-                bool lPending = socket.ConnectAsync(e);
-                if (!lPending)
-                    OnConnectCompleted(null, e);
+                Socket socket = e.UserToken as Socket;
+                if (socket != null)
+                {
+                    bool lPending = socket.ConnectAsync(e);
+                    if (!lPending)
+                        OnConnectCompleted(null, e);
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.Error(this.ClassName(), this.MethodName(), ex);
+                return;
             }
         }
 

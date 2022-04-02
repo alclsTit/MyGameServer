@@ -142,7 +142,7 @@ namespace ServerEngine.Network.ServerSession
         /// </summary>
         /// <param name="id"></param>
         /// <returns></returns>
-        public Session GetSession(string id)
+        public Session GetSessionByID(string id)
         {
             if (string.IsNullOrEmpty(id))
                 return null;
@@ -164,7 +164,12 @@ namespace ServerEngine.Network.ServerSession
                 using(var sequence = mContainer.GetEnumerator())
                 {
                     while (sequence.MoveNext())
-                        yield return sequence.Current.Value;
+                    {
+                        if (sequence.Current.Value is Session session)
+                        {
+                            yield return session;
+                        }
+                    }
                 }
             }
         }
@@ -182,8 +187,11 @@ namespace ServerEngine.Network.ServerSession
                 {
                     while(sequence.MoveNext())
                     {
-                        if (predicate(sequence.Current.Value))
-                            yield return sequence.Current.Value;
+                        if (sequence.Current.Value is Session session)
+                        {
+                            if (predicate == null || predicate(session))
+                                yield return session;
+                        }
                     }
                 }
             }

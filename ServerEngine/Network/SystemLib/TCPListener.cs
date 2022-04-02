@@ -134,9 +134,17 @@ namespace ServerEngine.Network.SystemLib
 
         private void StartAccept(SocketAsyncEventArgs e)
         {
-            var lPending = mListenSocket.AcceptAsync(e);
-            if (!lPending)
-                OnAcceptCompleted(null, e);
+            try
+            {
+                var lPending = mListenSocket.AcceptAsync(e);
+                if (!lPending)
+                    OnAcceptCompleted(null, e);
+            }
+            catch (Exception ex)
+            {
+                logger.Error(this.ClassName(), this.MethodName(), ex);
+                return;
+            }
         }
 
         private void OnAcceptCompleted(object sender, SocketAsyncEventArgs e)
