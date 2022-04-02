@@ -61,5 +61,51 @@ namespace RelayServer.Config
 
             return true;
         }
+
+
+        /// <summary>
+        /// Mssql DB 연동관련 connection 옵션 설정 
+        /// </summary>
+        /// <param name="dbHostName">DB 서버가 존재하는 서버 IP주소</param>
+        /// <param name="port">DB 서버 PORT</param>
+        /// <param name="ipv4">ipv4 유무</param>
+        /// <returns></returns>
+        public override bool LoadMssqlConfig(string dbHostName, ushort port = 1433, bool ipv4 = true)
+        {
+            var dbHostIPEndPoint = ServerEngine.Common.ServerHostFinder.GetIPAddressInHostEntry(dbHostName, port, ipv4);
+            if (dbHostIPEndPoint == null)
+                return false;
+
+            var dbHostIP = dbHostIPEndPoint.Address.ToString();
+            var dbHostPort = port.ToString();
+
+            MssqlConfigManager.TryAdd(eMSSQL_DBTYPE.LAB_GAME01, new MssqlConfig(eMSSQL_DBTYPE.LAB_GAME01, dbHostIP, dbHostPort, "alclsTit", "c975813"));
+            MssqlConfigManager.TryAdd(eMSSQL_DBTYPE.LAB_GAME02, new MssqlConfig(eMSSQL_DBTYPE.LAB_GAME02, dbHostIP, dbHostPort, "alclsTit", "c975813"));
+
+            return true;
+        }
+
+        /// <summary>
+        ///  Mysql DB 연동관련 connection 옵션 설정 
+        /// </summary>
+        /// <param name="dbHostName">DB 서버가 존재하는 서버 IP주소</param>
+        /// <param name="port">DB 서버 PORT</param>
+        /// <param name="ipv4">ipv4 유무</param>
+        /// <returns></returns>
+        public override bool LoadMysqlConfig(string dbHostName, ushort port = 3306, bool ipv4 = true)
+        {
+            var dbHostIPEndPoint = ServerEngine.Common.ServerHostFinder.GetIPAddressInHostEntry(dbHostName, port, ipv4);
+            if (dbHostIPEndPoint == null)
+                return false;
+
+            var dbHostIP = dbHostIPEndPoint.Address.ToString();
+            var dbHostPort = port.ToString();
+
+            // TODO: 추후 mysql 연동이 필요할 때 추가작업 진행
+            //MysqlConfigManager.TryAdd(eMYSQL_DBTYPE.LAB_GAME01, new MssqlConfig(eMYSQL_DBTYPE.LAB_GAME01, dbHostIP, dbHostPort, "root", "c975813"));
+            //MysqlConfigManager.TryAdd(eMYSQL_DBTYPE.LAB_GAME02, new MssqlConfig(eMYSQL_DBTYPE.LAB_GAME02, dbHostIP, dbHostPort, "root", "c975813"));
+
+            return true;
+        }
     }
 }
