@@ -31,8 +31,8 @@ namespace ServerEngine.Network.Message
         /// <summary>
         /// 전역으로 하나의 객체만 사용. 외부에서 패킷메시지를 등록하여 이곳에서 전체관리
         /// </summary>
-        private readonly static PacketProcessorManager mInstance = new PacketProcessorManager();
-        public static PacketProcessorManager Instance => mInstance;
+        private static readonly Lazy<PacketProcessorManager> mInstance = new Lazy<PacketProcessorManager>(() => new PacketProcessorManager());
+        public static PacketProcessorManager Instance => mInstance.Value;
         private PacketProcessorManager() { }
 
         public bool IsExist(ushort id) => mProcessor.ContainsKey(id);

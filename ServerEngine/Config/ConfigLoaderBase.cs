@@ -20,10 +20,10 @@ namespace ServerEngine.Config
         where ConfigInfo : ServerConfig, new()
     {
         /// <summary>
-        /// 해당 ConfigLoader를 상속한 클래스들 또한 전역으로 한번만 생성되는 것을 요구하기 때문에 추상클래스에서 싱글톤으로 선언
+        /// 해당 ConfigLoader를 상속한 클래스들 또한 전역으로 한번만 생성되는 것을 요구하기 때문에 추상클래스에서 싱글톤으로 선언 (게으른 생성)
         /// </summary>
-        private readonly static ConfigLoaderBase<Class, ConfigInfo> msInstance = Activator.CreateInstance(typeof(Class), true) as Class;
-        public static ConfigLoaderBase<Class, ConfigInfo> Instance => msInstance;
+        private static readonly Lazy<ConfigLoaderBase<Class, ConfigInfo>> msInstance = new Lazy<ConfigLoaderBase<Class, ConfigInfo>>(() => Activator.CreateInstance(typeof(Class), true) as Class);
+        public static ConfigLoaderBase<Class, ConfigInfo> Instance => msInstance.Value;
 
         /// <summary>
         /// Config 파일이 저장된 경로

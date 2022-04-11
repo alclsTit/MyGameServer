@@ -9,9 +9,9 @@ namespace ServerEngine.Network.Message
 {
     public class PacketParser
     {
-        private static readonly PacketParser mInstance = new PacketParser();
+        private static readonly Lazy<PacketParser> mInstance = new Lazy<PacketParser>(() => new PacketParser());
 
-        public static PacketParser Instance => mInstance;
+        public static PacketParser Instance => mInstance.Value;
 
         private PacketParser() { }
 
