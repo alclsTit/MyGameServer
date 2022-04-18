@@ -11,11 +11,10 @@ namespace ServerEngine.Common
     /// [조건]
     /// 1. Thread-safe
     /// 2. 다양한 객체에 대응 
-    /// 3. 메모리 파편화가 발새하지 않아야된다 
-    /// 4. lock-free
+    /// 3. 메모리 파편화가 발생하지 않아야된다 
     /// </summary>
     /// <typeparam name="T">풀링할 객체인 T는 참조타입이면서 디폴트 생성자가 존재해야한다</typeparam>
-    public class ObjectPool<T> where T : IDisposable, new()
+    public class ObjectPool<T> where T : class, IDisposable, new()
     {
         private bool mAlreadyDisposed = false;
         private Queue<T> mQueue = new Queue<T>();

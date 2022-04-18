@@ -27,17 +27,12 @@ namespace ServerEngine.Network.ServerSession
                 var headerSize = BitConverter.ToUInt16(buffer.Array, buffer.Offset);
                 if (headerSize > buffer.Count)
                 {
-                    // 패킷이 부분적으로 전달되었다
-                    // 전체 [300] = buffer.count 중 [150] [150] 전달
-                    // headsize = 300 
-                    // 4096 96 = offset / 4000 left
                     break;
                 }
                 else 
                 {
                     if (CheckRecvPacketValidate(buffer))
                     {
-                        // 패킷이 한번에 온전하게 전달되었다
                         var offset = buffer.Offset;
                         var length = headerSize;
                         Task.Run(() => ProcessReceivePacket(new ArraySegment<byte>(buffer.Array, offset, length)));

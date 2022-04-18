@@ -34,7 +34,7 @@ namespace AuthServer
                 {
                     if (ConfigLoader.Instance.LoadListeners(listenInfoList))
                     {
-                        if (ConfigLoader.Instance.LoadMssqlConfig("DBServer") /*&& ConfigLoader.Instance.LoadMysqlConfig("DBServer")*/)
+                        if (ConfigLoader.Instance.LoadMssqlConfig("127.0.0.1") /*&& ConfigLoader.Instance.LoadMysqlConfig("DBServer")*/)
                         {
                             if (!authServer.Setup<ServerConnectModule, AuthServerConfig, TCPConnecter>(listenInfoList, config, () => new AuthSession()))
                             {
