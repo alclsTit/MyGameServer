@@ -72,7 +72,7 @@ namespace ServerEngine.Network.Message
             else
             {
                 // 남은 데이터가 있으면 시작 위치로 복사
-                Array.Copy(mRecvBuffer.Array, mRecvBuffer.Offset + mNumOfRead, mRecvBuffer.Array, mRecvBuffer.Offset, GetDataSize);
+                Array.Copy(mRecvBuffer.Array, mRecvBuffer.Offset + mNumOfRead, mRecvBuffer.Array, mRecvBuffer.Offset, dataSize);
                 mNumOfWrite = dataSize;
                 mNumOfRead = 0;
             }
