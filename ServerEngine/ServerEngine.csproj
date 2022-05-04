@@ -16,7 +16,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Folder Include="Common\" />
     <Folder Include="Config\" />
     <Folder Include="Log\" />
     <Folder Include="Network\Message\" />
@@ -26,6 +25,7 @@
 
   <ItemGroup>
     <PackageReference Include="log4net" Version="2.0.14" />
+    <PackageReference Include="Microsoft.Extensions.ObjectPool" Version="7.0.0-preview.3.22178.4" />
     <PackageReference Include="protobuf-net" Version="3.0.101" />
     <PackageReference Include="System.Data.SqlClient" Version="4.8.3" />
   </ItemGroup>

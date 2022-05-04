@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using System.Threading;
 using System.Net;
 using System.Net.Sockets;
+using Microsoft.Extensions.ObjectPool;
 
 using ServerEngine.Common;
 using ServerEngine.Log;
@@ -23,9 +24,19 @@ namespace ServerEngine.Network.Server
 
         public Logger logger { get; private set; }
 
+        #region "2022.05.04 기존 커스텀 ObjectPool -> Microsoft.Extensions.ObjectPool로 변경에 따른 코드 주석처리"
+        /*
         public SocketAsyncEventArgsPool mRecvEventPool { get; private set; }
-
         public SocketAsyncEventArgsPool mSendEventPool { get; private set; }
+        */
+        #endregion
+
+        #region "Microsoft.Extensions.ObjectPool"
+        private DefaultObjectPoolProvider mPoolProvider = new DefaultObjectPoolProvider();
+        private SocketEventArgsObjectPoolPolicy mPoolPolicy = new SocketEventArgsObjectPoolPolicy();
+        public Microsoft.Extensions.ObjectPool.ObjectPool<SocketAsyncEventArgs> mRecvEventPoolFix { get; private set; }
+        public Microsoft.Extensions.ObjectPool.ObjectPool<SocketAsyncEventArgs> mSendEventPoolFix { get; private set; }
+        #endregion
 
         /// <summary>
         /// 서버 세션 매니저
@@ -111,8 +122,20 @@ namespace ServerEngine.Network.Server
             
             mNetworkSystem = networkSystem;
 
+            #region "2022.05.04 기존 커스텀 ObjectPool -> Microsoft.Extensions.ObjectPool로 변경에 따른 코드 주석처리"
+            /*
             mRecvEventPool = new SocketAsyncEventArgsPool(mServerInfo.maxConnectNumber);
             mSendEventPool = new SocketAsyncEventArgsPool(mServerInfo.maxConnectNumber);
+            */
+            #endregion
+
+            // Microsoft.Extensions.ObjectPool 사용
+            // ObjectPool에서 관리하는 최대 Chunk 수 세팅
+            mPoolProvider.MaximumRetained = mServerInfo.maxConnectNumber;
+
+            // ObjectPool 객체생성 정책에 맞춰서 Recv/Send SocketAsyncEventArgs Pool 생성
+            mRecvEventPoolFix = mPoolProvider.Create(mPoolPolicy);
+            mSendEventPoolFix = mPoolProvider.Create(mPoolPolicy);
 
             var oldState = ServerState.NotInitialized;
             if (!ChangeState(oldState, ServerState.Initialized))
@@ -179,6 +202,8 @@ namespace ServerEngine.Network.Server
 
             //session.Initialize(sessionID, socket, mServerInfo, logger, mListenInfoList, isClient);
 
+            #region "2022.05.04 기존 커스텀 ObjectPool -> Microsoft.Extensions.ObjectPool로 변경에 따른 코드 주석처리"
+            /*
             if (mRecvEventPool.IsEmpty)
             {
                 if (logger.IsWarnEnabled)
@@ -190,10 +215,19 @@ namespace ServerEngine.Network.Server
                 if (logger.IsWarnEnabled)
                     logger.Warn(this.ClassName(), this.MethodName(), "[Send] SocketAsyncEventArgsPool is empty. Increase pool max count");
             }
+            */
+            #endregion
 
             session.Closed += OnSessionClosed;
+
+            #region "2022.05.04 기존 커스텀 ObjectPool -> Microsoft.Extensions.ObjectPool로 변경에 따른 코드 주석처리"
+            /*
             session.SetRecvEventByPool(mRecvEventPool.Pop());
             session.SetSendEventByPool(mSendEventPool.Pop());
+            */
+            #endregion
+            session.SetRecvEventByPool(mRecvEventPoolFix.Get());
+            session.SetSendEventByPool(mSendEventPoolFix.Get());
 
             return session;
         }
@@ -209,8 +243,15 @@ namespace ServerEngine.Network.Server
             session.Closed -= OnSessionClosed;
 
             session.ClearAllSocketAsyncEvent();
+
+            #region "2022.05.04 기존 커스텀 ObjectPool -> Microsoft.Extensions.ObjectPool로 변경에 따른 코드 주석처리"
+            /*
             mRecvEventPool.Push(session.mRecvEvent);
             mSendEventPool.Push(session.mSendEvent);
+            */
+            #endregion
+            mRecvEventPoolFix.Return(session.mRecvEvent);
+            mSendEventPoolFix.Return(session.mSendEvent);
 
             mSessionManager.Close(session.mSessionID);
         }
