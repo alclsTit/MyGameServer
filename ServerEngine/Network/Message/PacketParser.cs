@@ -4,13 +4,18 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.IO;
+using FlatSharp; 
 
 namespace ServerEngine.Network.Message
 {
     public class PacketParser
     {
+        /// <summary>
+        /// * 싱글턴 클래스는 하나의 인스턴스만을 갖는다. 매개변수로 사용할 수 있다. 상속계층을 갖을 수 있다
+        /// * 정적 클래스는 인스턴스를 갖지않는다.매개변수로 사용할 수 없다.상속 할 수 없다. 하나의 정적 생성자를 갖을 수 있으나 초기화 시점을 지정할 수 없다
+        /// 실제 사용될 때 인스턴스가 생성되는 게으른생성을 통한 싱글톤 패턴사용
+        /// </summary>
         private static readonly Lazy<PacketParser> mInstance = new Lazy<PacketParser>(() => new PacketParser());
-
         public static PacketParser Instance => mInstance.Value;
 
         private PacketParser() { }
@@ -93,7 +98,7 @@ namespace ServerEngine.Network.Message
         public TPacket BufferToMessage<TPacket>(ArraySegment<byte> buffer) where TPacket : Packet
         {
             // ArraySegment 내부의 array가 null인 상태로 넘어올 경우 null로 반환
-            if (buffer == default(ArraySegment<byte>))
+            if (buffer.Array == null)
                 return null;
 
             TPacket packet;
@@ -129,7 +134,7 @@ namespace ServerEngine.Network.Message
             packet.SetSize(sizeOfPacket, false);
             offset += PacketHeaderInfo.MAX_PACKET_HEADER_SIZE;
 
-            packet.SetId(BitConverter.ToUInt16(spanBuffer.Slice(offset, PacketHeaderInfo.MAX_PACKET_HEADER_ID)));
+            packet.SetID(BitConverter.ToUInt16(spanBuffer.Slice(offset, PacketHeaderInfo.MAX_PACKET_HEADER_ID)));
             offset += PacketHeaderInfo.MAX_PACKET_HEADER_ID;
             
             packet.SetCheckTime(BitConverter.ToInt64(spanBuffer.Slice(offset, PacketHeaderInfo.MAX_PACKET_HEADER_TICKCOUNT)));

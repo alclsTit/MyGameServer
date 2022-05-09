@@ -16,7 +16,7 @@ namespace ServerEngine.Protocol
     public static class Message_World
     {
         [ProtoContract]
-        public class notify_socket_session_connected : Packet
+        public sealed class notify_socket_session_connected : Packet
         {
             [ProtoMember(4)]
             public string remoteIP;
@@ -28,7 +28,7 @@ namespace ServerEngine.Protocol
         }
 
         [ProtoContract]
-        public class notify_socket_session_disconnected : Packet
+        public sealed class notify_socket_session_disconnected : Packet
         {
             [ProtoMember(4)]
             public string logdate;

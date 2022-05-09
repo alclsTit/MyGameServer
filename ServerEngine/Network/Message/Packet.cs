@@ -27,7 +27,7 @@ namespace ServerEngine.Network.Message
             this.id = id;   
         }
 
-        public void SetId(ushort id)
+        public void SetID(ushort id)
         {
             this.id = id;
         }
