@@ -124,6 +124,8 @@ namespace ServerEngine.Network.SystemLib
                 if (logger.IsDebugEnabled)
                     logger.Debug("Connect Completed!!!");
 
+                ChangeConnectState(true);
+
                 var session = mServerModule.NewClientSessionCreate(Guid.NewGuid().ToString(), e, logger, mSessionCreater, true);
                 if (session != null)
                 {
@@ -156,10 +158,10 @@ namespace ServerEngine.Network.SystemLib
                 }
             }
 
-            // Todo: 이후 connect 관련 작업 중단 시 추가될 부분 
+            // Todo: 이후 connect 관련 작업 중단 시 추가될 부분
+            ChangeConnectState(false);
 
             Interlocked.Exchange(ref mSystemState, NetworkSystemState.StopCompleted);
-
         }
 
         #region "ConnectBackup"

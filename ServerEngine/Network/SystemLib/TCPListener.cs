@@ -160,6 +160,8 @@ namespace ServerEngine.Network.SystemLib
                 if (logger.IsDebugEnabled)
                     logger.Debug("Accept Completed!!!");
 
+                ChangeConnectState(true);
+
                 Session session = null;
                 var serverName = mServerModule.GetConnectedServerName(e.AcceptSocket.LocalEndPoint);
                 if (serverName == default(string))
@@ -189,7 +191,7 @@ namespace ServerEngine.Network.SystemLib
                     {
                         // 이미 해당 IP, PORT로 소켓 연결된 서버가 존재한다. 해당 연결 Close 처리진행
                         Stop();
-                        return; 
+                        //return; 
                     }
                 }
       
@@ -262,10 +264,11 @@ namespace ServerEngine.Network.SystemLib
             {
                 try
                 {
-                    if (mListenSocket.Connected)
+                    //if (mListenSocket.Connected)
+                    if (IsConnected)
                     {
                         mListenSocket.Shutdown(SocketShutdown.Both);
-                        mListenSocket.Close();
+                        mListenSocket.Close();  // Socket은 Close 호출 시 내부에서 Dispose 호출
                     }
 
                     mAcceptEvent.Completed -= new EventHandler<SocketAsyncEventArgs>(OnAcceptCompleted);
@@ -285,6 +288,8 @@ namespace ServerEngine.Network.SystemLib
 
                 OnStopCallback();
             }
+
+            ChangeConnectState(false);
         }    
     }
 }

@@ -83,6 +83,12 @@ namespace ServerEngine.Network.SystemLib
         /// </summary>
         public event EventHandler StopCallback;
 
+        /// <summary>
+        /// Socket Connect 관련 상태 플래그 (1:연결 / 0:비연결)
+        /// </summary>
+        public int mConnected = 0;
+
+        public bool IsConnected => mConnected == 1 ? true : false;
 
         /// <summary>
         /// 클래스 멤버필드관련 초기화 메서드 
@@ -138,6 +144,18 @@ namespace ServerEngine.Network.SystemLib
         protected void OnStopCallback()
         {
             StopCallback?.Invoke(null, EventArgs.Empty);
+        }
+
+        /// <summary>
+        /// Socket Connect 상태를 원자적으로 변경
+        /// *bool 타입의 경우 Interlocked에서 지원해주지 않기 때문에 true = 1 / false = 0 으로 치환하여 작업 
+        /// </summary>
+        /// <param name="flag">변경할 socket connect 값</param>
+        public bool ChangeConnectState(bool flag)
+        {
+            var curState = mConnected;
+            var flagToInt = flag == true ? 1 : 0;
+            return curState == Interlocked.Exchange(ref mConnected, flagToInt) ? true : false;
         }
     }
 }
