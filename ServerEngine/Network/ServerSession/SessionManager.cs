@@ -42,7 +42,7 @@ namespace ServerEngine.Network.ServerSession
 
         public int GetSessionCount() => mContainer.Count;
 
-        protected object mLockObject = new object();
+        protected static object mLockObject = new object();
 
         protected SessionManagerBase() { }
 
@@ -129,6 +129,7 @@ namespace ServerEngine.Network.ServerSession
         /// <summary>
         /// 세션매니저에서 관리하는 최대의 세션 Connection 수를 넘어갔는지 확인
         /// * 만약, 최대관리 가능한 세션수를 넘었을 때, 인원제한이 걸렸다는 정보 전달 및 접속불가로 처리
+        /// * ThreadSafe
         /// </summary>
         /// <returns></returns>
         public bool CheckConnectionMax()
@@ -199,6 +200,7 @@ namespace ServerEngine.Network.ServerSession
 
         /// <summary>
         /// 현재 연결된 서버 세션과 동일한 세션을 연결하고자 요청하는지 체크
+        /// ThreadSafe
         /// </summary>
         /// <param name="predicate"></param>
         /// <returns>현재 세션매니저에 동일한 ip, port를 가진 대상이 있는 경우 True 반환, 그렇지 않으면 false 반환</returns>

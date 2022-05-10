@@ -31,6 +31,12 @@ namespace ServerEngine.Network.SystemLib
         private SocketAsyncEventArgs mAcceptEvent;
 
         /// <summary>
+        /// Thread 동기화에 사용될 Lock 객체(CriticalSection)
+        /// </summary>
+
+        protected static object mLockObject = new();
+
+        /// <summary>
         /// TCPListener 멤버 데이터 초기화 
         /// * 객체 인스턴스 생성 후 가장 먼저 호출하여 멤버 초기화 진행
         /// </summary>
@@ -143,66 +149,79 @@ namespace ServerEngine.Network.SystemLib
             catch (Exception ex)
             {
                 logger.Error(this.ClassName(), this.MethodName(), ex);
-                return;
             }
         }
 
+        // CallBack 핸들러와 이전 작업들은 서로 다른 스레드에서 진행된다. 공유변수가 있다면 동기화가 필요
         private void OnAcceptCompleted(object sender, SocketAsyncEventArgs e)
         {
-            if (!AsyncCallbackChecker.CheckCallbackHandler_SocketError(e.SocketError))
-            {
-                logger.Error(this.ClassName(), this.MethodName(), $"[SocketError = {e.SocketError}");
-                return;
-            }
-
             try
             {
-                if (logger.IsDebugEnabled)
-                    logger.Debug("Accept Completed!!!");
-
-                ChangeConnectState(true);
-
-                Session session = null;
-                var serverName = mServerModule.GetConnectedServerName(e.AcceptSocket.LocalEndPoint);
-                if (serverName == default(string))
+                if (!AsyncCallbackChecker.CheckCallbackHandler_SocketError(e.SocketError))
                 {
-                     // 클라이언트 접속
-                    if (!mServerModule.mSessionManager.CheckConnectionMax())
-                    {
-                        session = mServerModule.NewClientSessionCreate(Guid.NewGuid().ToString(), e, logger, mSessionCreater, true);
-                        if (session != null)
-                            OnSessionCreateCompleted(session, e);
-                    }
-                    else
-                    {
-                        logger.Error(this.ClassName(), this.MethodName(), $"Session[{GetIPEndPoint.Address}:{GetIPEndPoint.Port}] is Full!!!");
-                    }
+                    logger.Error(this.ClassName(), this.MethodName(), $"[SocketError = {e.SocketError}");
+                    // 서버 소켓에러 발생 시, 해당 연결 Close 처리 진행
+                    Stop();
                 }
                 else
                 {
-                    if (!mServerModule.mSessionManager.CheckMultiConnected(e.AcceptSocket.LocalEndPoint))
+                    if (logger.IsDebugEnabled)
+                        logger.Debug("Accept Completed!!!");
+
+                    ChangeConnectState(true);
+
+                    Session session = null;
+                    var serverName = mServerModule.GetConnectedServerName(e.AcceptSocket.LocalEndPoint);
+                    if (string.IsNullOrEmpty(serverName))
                     {
-                        // 서버 접속 
-                        session = mServerModule.NewClientSessionCreate(serverName, e, logger, mSessionCreater, false);
-                        if (session != null)
-                            OnSessionCreateCompleted(session, e);
+                        // 클라이언트가 접속했을 경우 - 접속 인원이 모두 찼는지 체크 (세션 생성 / 접속차단)
+                        if (!mServerModule.mSessionManager.CheckConnectionMax())
+                        {
+                            lock(mLockObject)
+                            {
+                                session = mServerModule.NewClientSessionCreate(Guid.NewGuid().ToString(), e, logger, mSessionCreater, true);
+                                if (session != null)
+                                    OnSessionCreateCompleted(session, e);
+                            }
+                        }
+                        else
+                        {
+                            logger.Error(this.ClassName(), this.MethodName(), $"Session[{GetIPEndPoint.Address}:{GetIPEndPoint.Port}] is Full!!!");
+                            // 서버에서 관리할 수 있는 최대 클라이언트 수가 초과되었을 때, 해당 연결 Close 처리 진행
+                            Stop();
+                        }
                     }
                     else
                     {
-                        // 이미 해당 IP, PORT로 소켓 연결된 서버가 존재한다. 해당 연결 Close 처리진행
-                        Stop();
-                        //return; 
+                        if (!mServerModule.mSessionManager.CheckMultiConnected(e.AcceptSocket.LocalEndPoint))
+                        {
+                            // 서버 접속 
+                            lock(mLockObject)
+                            {
+                                session = mServerModule.NewClientSessionCreate(serverName, e, logger, mSessionCreater, false);
+                                if (session != null)
+                                    OnSessionCreateCompleted(session, e);
+                            }
+                        }
+                        else
+                        {
+                            // 이미 해당 IP, PORT로 소켓 연결된 서버가 존재한다. 해당 연결 Close 처리 진행
+                            Stop();
+                        }
                     }
                 }
-      
-                // Socket 비동기 객체를 재사용하기 위해서 AcceptSocket null처리 및 StartAccept 재호출
-                e.AcceptSocket = null;
-                StartAccept(e);
             }
             catch (Exception ex)
             {
                 logger.Error(this.ClassName(), this.MethodName(), ex);
-                return; 
+                // 익셉션 발생 시, 해당 연결 Close 처리 진행
+                Stop();
+            }
+            finally
+            {
+                // Socket 비동기 객체를 재사용하기 위해서 AcceptSocket null처리 및 StartAccept 재호출
+                e.AcceptSocket = null;
+                StartAccept(e);
             }
         }
 
@@ -225,12 +244,10 @@ namespace ServerEngine.Network.SystemLib
             catch (ArgumentNullException argNullEx)
             {
                 logger.Error(this.ClassName(), this.MethodName(), argNullEx);
-                return;
             }
             catch(Exception ex)
             {
                 logger.Error(this.ClassName(), this.MethodName(), ex);
-                return;
             }
         }
 
@@ -254,16 +271,16 @@ namespace ServerEngine.Network.SystemLib
                 }
             }
 
-            if (mListenSocket == null)
-            {
-                logger.Error(this.ClassName(), this.MethodName(), $"Fail to stop - ListenSocket is null");
-                return;
-            }
-
             lock (mLockObject)
             {
                 try
                 {
+                    if (mListenSocket == null)
+                    {
+                        logger.Error(this.ClassName(), this.MethodName(), $"Fail to stop - ListenSocket is null");
+                        return;
+                    }
+
                     //if (mListenSocket.Connected)
                     if (IsConnected)
                     {

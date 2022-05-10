@@ -51,12 +51,6 @@ namespace ServerEngine.Network.SystemLib
         protected int mSystemState = NetworkSystemState.NotInitialized;
 
         /// <summary>
-        /// Thread 동기화에 사용될 Lock 객체
-        /// </summary>
-
-        protected object mLockObject = new object();
-
-        /// <summary>
         /// IPEndpoint (ip, port 등..) 반환
         /// </summary>
         public IPEndPoint GetIPEndPoint => mListenInfo.ipEndpoint;

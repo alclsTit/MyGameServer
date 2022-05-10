@@ -20,6 +20,8 @@ namespace ServerEngine.Network.SystemLib
     /// </summary>
     public class TCPConnecter : NetworkSystemBase
     {
+        private static object mLockObject = new();
+
         /// <summary>
         /// TCPConnecter 멤버 데이터 초기화
         /// * 객체 인스턴스 생성 후 가장 먼저 호출하여 멤버 초기화 진행
@@ -107,7 +109,6 @@ namespace ServerEngine.Network.SystemLib
             catch (Exception ex)
             {
                 logger.Error(this.ClassName(), this.MethodName(), ex);
-                return;
             }
         }
 
@@ -116,6 +117,8 @@ namespace ServerEngine.Network.SystemLib
             if (!AsyncCallbackChecker.CheckCallbackHandler_SocketError(e.SocketError))
             {
                 logger.Error(this.ClassName(), this.MethodName(), $"[SocketError = {e.SocketError}]");
+                // 서버 소켓에러 발생 시, 해당 연결 Close 처리진행
+                Stop();
                 return;
             }
 
@@ -126,11 +129,14 @@ namespace ServerEngine.Network.SystemLib
 
                 ChangeConnectState(true);
 
-                var session = mServerModule.NewClientSessionCreate(Guid.NewGuid().ToString(), e, logger, mSessionCreater, true);
-                if (session != null)
+                lock(mLockObject)
                 {
-                    session.StartReceive();
-                    session.OnConnected(e.RemoteEndPoint);
+                    var session = mServerModule.NewClientSessionCreate(Guid.NewGuid().ToString(), e, logger, mSessionCreater, true);
+                    if (session != null)
+                    {
+                        session.StartReceive();
+                        session.OnConnected(e.RemoteEndPoint);
+                    }
                 }
 
                 //StartConnect(e);
@@ -138,7 +144,8 @@ namespace ServerEngine.Network.SystemLib
             catch (Exception ex)
             {
                 logger.Error(this.ClassName(), this.MethodName(), ex);
-                return;
+                // 익셉션 발생 시, 해당 연결 Close 처리 진행
+                Stop();
             }
         }
 
