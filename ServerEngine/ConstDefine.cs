@@ -66,7 +66,7 @@ namespace ServerEngine
         public const int Initialized = 1;
 
         public const int SetupFinished = 2;
-
+        
         public const int NotStarted = 3;
 
         public const int Running = 4;

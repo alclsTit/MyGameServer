@@ -7,6 +7,11 @@ using System.Threading;
 using System.Collections.Concurrent;
 using System.Net;
 
+// 2022.05.14 세션 매니저 수정 작업 - 세션 추가, 삭제를 이곳으로 옮겨서 진행할 수 있는지...
+using System.Net.Sockets;
+using ServerEngine.Log;
+using ServerEngine.Common;
+
 namespace ServerEngine.Network.ServerSession
 {
     public interface ISessionManager
@@ -26,6 +31,11 @@ namespace ServerEngine.Network.ServerSession
         bool CheckConnectionMax();
 
         bool CheckMultiConnected(EndPoint endPoint);
+
+        // 2022.05.14 세션 매니저 수정 작업 - 세션 추가, 삭제를 이곳으로 옮겨서 진행할 수 있는지...
+        //public Session NewClientSessionCreate(string sessionID, SocketAsyncEventArgs e, Logger logger, Func<Session> creater, bool isClient);
+
+        //public void OnSessionClosed(Session session, eCloseReason reason);
     }
 
     /// <summary>
@@ -42,7 +52,7 @@ namespace ServerEngine.Network.ServerSession
 
         public int GetSessionCount() => mContainer.Count;
 
-        protected static object mLockObject = new object();
+        private readonly object mLockObject = new object();
 
         protected SessionManagerBase() { }
 
@@ -220,7 +230,50 @@ namespace ServerEngine.Network.ServerSession
 
             RemoveSession(id);
         }
-       
+
+
+        // 2022.05.14 세션 매니저 수정 작업 - 세션 추가, 삭제를 이곳으로 옮겨서 진행할 수 있는지...
+
+        /*
+        public virtual Session NewClientSessionCreate(string sessionID, SocketAsyncEventArgs e, Logger logger, Func<Session> creater, bool isClient)
+        { 
+            if (e.LastOperation != System.Net.Sockets.SocketAsyncOperation.Accept && 
+                e.LastOperation != System.Net.Sockets.SocketAsyncOperation.Connect)
+            {
+                //
+            }
+
+            var session = creater.Invoke();
+            if (e.LastOperation == SocketAsyncOperation.Accept)
+                session.Initialize(sessionID, e.AcceptSocket, mServerInfo, logger, mListenInfoList, isClient);
+            else
+                session.Initialize(sessionID, e.ConnectSocket, mServerInfo, logger, mListenInfoList, isClient);
+
+
+            session.SetRecvEventByPool(mRecvEventPoolFix.Get());
+            session.SetSendEventByPool(mSendEventPoolFix.Get());
+
+            return session;
+        }
+
+        public virtual void OnSessionClosed(Session session, eCloseReason reason)
+        {
+            if (session == null)
+            {
+                logger.Error(this.ClassName(), this.MethodName(), "Session Object is null!!!");
+                return;
+            }
+
+            session.Closed -= OnSessionClosed;
+
+            session.ClearAllSocketAsyncEvent();
+
+            mRecvEventPoolFix.Return(session.mRecvEvent);
+            mSendEventPoolFix.Return(session.mSendEvent);
+
+            Close(session.mSessionID);
+        }
+        */
     }
 
 

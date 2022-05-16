@@ -30,8 +30,10 @@ namespace ServerEngine.Network.SystemLib
                 mRawSocket.NoDelay = true;
 
             mRawSocket.ReceiveBufferSize = config.recvBufferSize > 0 ? config.recvBufferSize : config.DefaultRecvBufferSize;
-
             mRawSocket.SendBufferSize = config.sendBufferSize > 0 ? config.sendBufferSize : config.DefaultSendBufferSize;
+
+            mRawSocket.SendTimeout = config.sendTimeout > 0 ? config.sendTimeout : config.DefaultSendTimeout;
+            mRawSocket.ReceiveTimeout = config.recvTimeout > 0 ? config.recvTimeout : config.DefaultRecvTimeout;
 
             if (config.socketLingerFlag)
             {
@@ -41,6 +43,5 @@ namespace ServerEngine.Network.SystemLib
 
             mRawSocket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
         }
-
     }
 }

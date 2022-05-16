@@ -20,7 +20,7 @@ namespace ServerEngine.Network.SystemLib
     /// </summary>
     public class TCPConnecter : NetworkSystemBase
     {
-        private static object mLockObject = new();
+        private readonly object mLockObject = new object();
 
         /// <summary>
         /// TCPConnecter 멤버 데이터 초기화
@@ -131,6 +131,8 @@ namespace ServerEngine.Network.SystemLib
 
                 lock(mLockObject)
                 {
+                    // 2022.05.14 세션 매니저 수정 작업 - 세션 추가, 삭제를 이곳으로 옮겨서 진행할 수 있는지...
+                    //var session = mServerModule.mSessionManager.
                     var session = mServerModule.NewClientSessionCreate(Guid.NewGuid().ToString(), e, logger, mSessionCreater, true);
                     if (session != null)
                     {

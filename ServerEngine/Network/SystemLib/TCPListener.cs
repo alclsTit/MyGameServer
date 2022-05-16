@@ -34,7 +34,7 @@ namespace ServerEngine.Network.SystemLib
         /// Thread 동기화에 사용될 Lock 객체(CriticalSection)
         /// </summary>
 
-        protected static object mLockObject = new();
+        private readonly object mLockObject = new Object();
 
         /// <summary>
         /// TCPListener 멤버 데이터 초기화 
@@ -206,6 +206,7 @@ namespace ServerEngine.Network.SystemLib
                         else
                         {
                             // 이미 해당 IP, PORT로 소켓 연결된 서버가 존재한다. 해당 연결 Close 처리 진행
+                            logger.Error(this.ClassName(), this.MethodName(), $"Session[{GetIPEndPoint.Address}:{GetIPEndPoint.Port} is already connected!!!");
                             Stop();
                         }
                     }
@@ -271,7 +272,7 @@ namespace ServerEngine.Network.SystemLib
                 }
             }
 
-            lock (mLockObject)
+            lock(mLockObject)
             {
                 try
                 {

@@ -22,10 +22,19 @@ namespace ServerEngine.Network.ServerSession
 
         public bool mIsClient { get; private set; }
 
+        /// <summary>
+        /// 소켓 IO 작업에 사용되는 소켓 클래스
+        /// </summary>
         public TCPSocket mSocketWrapper { get; private set; }
 
+        /// <summary>
+        /// Send용 SocketAsyncEventArgs  
+        /// </summary>
         public SocketAsyncEventArgs mRecvEvent { get; private set; }
 
+        /// <summary>
+        /// Recv용 SocketAsyncEventArgs  
+        /// </summary>
         public SocketAsyncEventArgs mSendEvent { get; private set; }
 
         /// <summary>
@@ -38,7 +47,6 @@ namespace ServerEngine.Network.ServerSession
         /// Session 객체에서 사용할 서버 옵션
         /// </summary>
         public ServerConfig mServerInfo { get; private set; }
-
 
         /// <summary>
         /// 모든 리슨정보
@@ -58,7 +66,7 @@ namespace ServerEngine.Network.ServerSession
         public Queue<ArraySegment<byte>> mSendingQueue { get; private set; } = new Queue<ArraySegment<byte>>();
 
         /// <summary>
-        /// Send 될 패킷을 담은 리스트
+        /// Send 될 패킷을 담은 리스트, SocketAsyncEventArgs.BufferList에 사용
         /// </summary>
         public List<ArraySegment<byte>> mSendingList { get; private set; } = new List<ArraySegment<byte>>();
 
@@ -69,11 +77,11 @@ namespace ServerEngine.Network.ServerSession
         #endregion
 
         /// <summary>
-        /// Recv 처리관련 클래스
+        /// Recv된 패킷처리 담당 클래스
         /// </summary>
         public MessageProcessor mMessageProcessor;
 
-        protected object mLockObject { get; private set; } = new object();
+        private readonly object mLockObject = new object();
 
         public Action<Session, eCloseReason> Closed { get; set; }
 
@@ -146,20 +154,37 @@ namespace ServerEngine.Network.ServerSession
             return false;
         }
 
+        /// <summary>
+        /// 비동기 Recv 작업 진행 메서드
+        /// - 수신버퍼 초기화 및 SocketAsyncEventArgs의 수신버퍼 세팅
+        /// - 비동기 Recv 진행
+        /// </summary>
         private void ReceiveAsync()
-        {          
+        {
+            // 패킷을 수신할 수 있는 상태인지 확인        
+            // Recv SocketAsyncEventArgs null 체크, Socket 상태 Receiving으로 변경  
             if (!CheckStartReceive())
                 return;
 
+            // Recv 데이터를 저장할 ArraySegment 버퍼공간 초기화
             mMessageProcessor.Clear();
+            // 패킷 메시지를 쓸 수 있는 잔여 수신버퍼 획득
             var segment = mMessageProcessor.GetWriteMessage;
+            // 현재 세션에서 수신버퍼의 초기사이즈 만큼의 ArraySegment 배열공간을 SocketAsyncEventArgs 수신버퍼에 세팅. 추후 이 부분에 수신된 패킷 데이터가 담겨질 예정
             mRecvEvent.SetBuffer(segment.Array, segment.Offset, segment.Count);
 
+            // 비동기 Recv 진행 
             var lPending = SocketReceiveAsync();
             if (!lPending)
                 OnRecvCompleted(null, mRecvEvent);
         }
 
+        /// <summary>
+        /// 비동기 Recv 작업이 성공했을 때 진행되는 Recv 관련 콜백 메서드 
+        /// - 수신된 데이터 체크 및 패킷 아이디에 따라 메시지 처리작업 진행
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
         private void OnRecvCompleted(object sender, SocketAsyncEventArgs e)
         {
             if (!AsyncCallbackChecker.CheckCallbackHandler(e.SocketError, e.BytesTransferred))
@@ -173,19 +198,25 @@ namespace ServerEngine.Network.ServerSession
 
             try
             {
+                // 수신된 바이트 수가 현재 세션에서 관리 중인 수신버퍼의 크기를 초과하였는지 체크
+                // 만약, 초과하였다면 잘못된 패킷 데이터가 수신된 것이므로 Recv 상태 제거 및 Socket Close 작업 진행
                 if (!mMessageProcessor.OnWriteMessage(e.BytesTransferred))
                 {
                     OnReceiveEnd();
                     return;
                 }
 
+                // 파라미터의 SocketAsyncEventArgs 객체의 Buffer(수신버퍼)의 내용을 읽어 정상적으로 데이터가 수신되었는지 판단
+                // 정상일 경우, 수신버퍼의 내용을 역직렬화를 통해 온전한 패킷으로 만들고 메시지 아이디에 따라서 적절하게 처리진행 
                 var processLength = OnReceive(mMessageProcessor.GetReadMessage);
+                // OnReceive의 반환값은 현재 읽은 패킷의 사이즈로서 0보다 작거나 현재 읽을 수 있는 크기보다 큰 경우 잘못된 경우로서 Socket Close 작업 진행
                 if (processLength < 0 || processLength > mMessageProcessor.GetDataSize)
                 {
                     OnReceiveEnd();
                     return;
                 }
 
+                // 현재 읽은 패킷 사이즈만큼 수신버퍼의 읽은 사이즈 추가
                 if (!mMessageProcessor.OnReadMessage(processLength))
                 {
                     OnReceiveEnd();
@@ -198,15 +229,12 @@ namespace ServerEngine.Network.ServerSession
             {
                 OnReceiveEnd(eCloseReason.SeverException);
                 logger.Error(this.ClassName(), this.MethodName(), outOfRangeEx);
-                return;
             }
             catch (Exception ex)
             {
                 OnReceiveEnd(eCloseReason.SeverException);
                 logger.Error(this.ClassName(), this.MethodName(), ex);
-                return;
             }
-
         }
         #endregion
 
@@ -216,7 +244,7 @@ namespace ServerEngine.Network.ServerSession
         /// </summary>
         public void StartSend(ArraySegment<byte> message)
         {
-            if (message == default(ArraySegment<byte>))
+            if (message.Array == null)
                 return;
 
             if (!mSocketWrapper.TryAddState(SocketState.Sending))
@@ -225,9 +253,10 @@ namespace ServerEngine.Network.ServerSession
                 return;
             }
 
-            lock (mLockObject)
+            lock(mLockObject)
             {
                 mSendingQueue.Enqueue(message);
+                // SendBufferList에 데이터가 없을 때 현재까지 큐잉된 패킷 데이터를 전송
                 if (IsAbleToSend)
                     SendAsync();
             }
@@ -264,6 +293,12 @@ namespace ServerEngine.Network.ServerSession
                 OnSendCompleted(null, mSendEvent);
         }
 
+        /// <summary>
+        /// 비동기 Send 작업이 성공했을 때 진행되는 Send 관련 콜백 메서드 
+        /// 사용한 Send 버퍼리스트 초기화 및 잔여 패킷이 있는 경우 Send 함수 재호출
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e">사용자 프로그램에서 운영체제 대상으로 비동기 입출력 IO를 할 수 있도록 도와주는 데이터 교환 등의 가교역할</param>
         private void OnSendCompleted(object sender, SocketAsyncEventArgs e)
         {
             if (!AsyncCallbackChecker.CheckCallbackHandler(e.SocketError, e.BytesTransferred))
@@ -275,22 +310,27 @@ namespace ServerEngine.Network.ServerSession
 
             try
             {
+                // 콜백 메서드가 실행되는 스레드는 Send 작업이 호출된 스레드와 다를 수 있으므로 공유 데이터에 대한 Lock 진행
                 lock(mLockObject)
                 {
                     // Send 버퍼리스트에 있는 대상을 모두 보낸 상태
+                    // SocketAsyncEventArgs.BufferList 관련 데이터 초기화
                     mSendEvent.BufferList = null;
                     mSendingList.Clear();
 
                     OnSend(mSendEvent.BytesTransferred);
 
+                    // Send 큐에 남은 데이터가 있는 경우 SendAsync 메서드 재호출 및 Send 작업 진행
                     if (mSendingQueue.Count > 0)
                     {
                         SendAsync();
                     }
                     else
                     {
+                        // 남은 작업이 없는 경우 Socket 상태 Sending 제거 
                         OnSendEnd();
 
+                        // 만약, 이 시점에 Send 큐에 남은 데이터가 있는 경우 SendAsync 메서드 재호출 및 Send 작업 진행
                         if (mSendingQueue.Count > 0)
                             SendAsync();
                     }
@@ -300,7 +340,6 @@ namespace ServerEngine.Network.ServerSession
             {
                 logger.Error(this.ClassName(), this.MethodName(), ex);
                 OnSendEnd(false, eCloseReason.SeverException);
-                return;
             }
         }
 

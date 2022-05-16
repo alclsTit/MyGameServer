@@ -55,6 +55,13 @@ namespace ServerEngine.Config
 
         // Default Encoding style (UTF-8)
         public readonly string DefaultEncoding = "UTF-8";
+
+        // Default Send Timeout 
+        public readonly int DefaultSendTimeout = 10000; // millisec (10초)
+
+        // Default Recv Timeout
+        public readonly int DefaultRecvTimeout = 10000; // millisec (10초)
+
         #endregion
 
         public int maxConnectNumber { get; set; }
@@ -96,6 +103,12 @@ namespace ServerEngine.Config
         // 문자 인코딩 스타일
         public string encoding { get; set; }
 
+        // Send Timeout 
+        public int sendTimeout { get; set; }
+
+        // Recv Timeout
+        public int recvTimeout { get; set; }
+
         protected ServerConfig()
         {
             maxConnectNumber = DefaultMaxConnectNumber;
@@ -114,6 +127,8 @@ namespace ServerEngine.Config
             maxIOThreadCount = DefaultMaxIOThreadCount;
             encoding = DefaultEncoding;
             controlThreadPoolCount = DefaultControlThreadPoolCount;
+            sendTimeout = DefaultSendTimeout;
+            recvTimeout = DefaultRecvTimeout;
         }
     }
 
