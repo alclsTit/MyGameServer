@@ -131,8 +131,8 @@ namespace ServerEngine.Network.Server
             }
 
             // 5. Send 패킷관련 Chunk 값 세팅
-            Message.SendMessageHelper.Initialize(config.sendBufferSize);
-
+            // 2022.05.12 Send 패킷관련 작업 중 필요없는 부분 삭제
+            // Message.SendMessageHelper.Initialize(config.sendBufferSize);
 
             return true;
         }
@@ -185,7 +185,8 @@ namespace ServerEngine.Network.Server
             }
 
             // 5. Send 패킷관련 Chunk 값 세팅
-            Message.SendMessageHelper.Initialize(config.sendBufferSize);
+            // 2022.05.12 Send 패킷관련 작업 중 필요없는 부분 삭제
+            //Message.SendMessageHelper.Initialize(config.sendBufferSize);
 
             return true;
         }
@@ -214,7 +215,7 @@ namespace ServerEngine.Network.Server
         {
             mServerState = ServerState.Running;
 
-            ThreadManager.StartThreadsAsync();
+            ThreadManager.StartThreads();
         }
 
         /// <summary>
@@ -379,6 +380,7 @@ namespace ServerEngine.Network.Server
 
         /// <summary>
         /// 패킷 송수신(accept, connect) 관련 Thread 세팅
+        /// 각 서버모듈 하나당 스레드가 하나씩 할당된다
         /// </summary>
         protected bool SetupThreads()
         {

@@ -7,6 +7,7 @@ using System.Net;
 
 using ServerEngine.Log;
 using ServerEngine.Network.SystemLib;
+using ServerEngine.Network.ServerSession;
 
 namespace ServerEngine.Network.Server
 {
@@ -22,9 +23,9 @@ namespace ServerEngine.Network.Server
 
         IPEndPoint ipEndPoint { get; }
 
-        void Initialize(List<IListenInfo> listenInfoList, IListenInfo listenInfo, Config.ServerConfig serverInfo, INetworkSystemBase networkSystem,  Logger logger, Func<ServerSession.Session> creater);
+        void Initialize(List<IListenInfo> listenInfoList, IListenInfo listenInfo, Config.ServerConfig serverInfo, INetworkSystemBase networkSystem,  Logger logger, Func<Session> creater);
 
-        void InitializeSessionManager(ServerSession.ISessionManager sessionManager);
+        void InitializeSessionManager(ISessionManager sessionManager);
 
         bool StartOnce();
 

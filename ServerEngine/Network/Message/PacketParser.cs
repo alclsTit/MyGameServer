@@ -74,12 +74,15 @@ namespace ServerEngine.Network.Message
 
             bool result = true;
 
+            // Span 버퍼의 offset에서 시작하여 sizeOfHeaderSize 만큼의 공간에 size 값을 쓴다
             result &= BitConverter.TryWriteBytes(spanBuffer.Slice(offset, sizeOfHeaderSize), size);
             offset += sizeOfHeaderSize;
 
+            // Span 버퍼의 offset에서 시작하여 sizeOfHeaderId 만큼의 공간에 id 값을 쓴다
             result &= BitConverter.TryWriteBytes(spanBuffer.Slice(offset, sizeOfHeaderId), id);
             offset += sizeOfHeaderId;
 
+            // Span 버퍼의 offset에서 시작하여 sizeOfHeaderCheckTime 만큼의 공간에 DateTime.Now.Ticks 값을 쓴다
             result &= BitConverter.TryWriteBytes(spanBuffer.Slice(offset, sizeOfHeaderCheckTime), DateTime.Now.Ticks);
             offset += sizeOfHeaderCheckTime;
 
@@ -102,21 +105,24 @@ namespace ServerEngine.Network.Message
                 return null;
 
             TPacket packet;
+            // 전달받은 buffer의 데이터를 읽기만 할 것이므로 읽기전용버퍼인 ReadOnlySpan 사용
             ReadOnlySpan<byte> spanBuffer = new ReadOnlySpan<byte>(buffer.Array, buffer.Offset, buffer.Count);
 
-            // 헤더 정보 
+            // 헤더 사이즈, 바디 사이즈 세팅
             int offset = 0;
             var sizeOfHeader = PacketHeaderInfo.MAX_PACKET_HEADER_SIZE + PacketHeaderInfo.MAX_PACKET_HEADER_ID + PacketHeaderInfo.MAX_PACKET_HEADER_TICKCOUNT;
             var sizeOfPacket = BitConverter.ToUInt16(spanBuffer.Slice(offset, PacketHeaderInfo.MAX_PACKET_HEADER_SIZE));
             var sizeOfBody = sizeOfPacket - sizeOfHeader;
 
-            // 바디 디시리얼라이징
+            // 패킷 바디에 대한 역직렬화 작업 진행
             var newBuffer = new ArraySegment<byte>(new byte[sizeOfBody]);
             Buffer.BlockCopy(buffer.Array, sizeOfHeader, newBuffer.Array, 0, sizeOfBody);
             using (var stream = new MemoryStream(newBuffer.Array))
             {
+                // 패킷 바디 역직렬화를 통해 패킷 메시지 내용 추출 
                 packet = ProtoBuf.Serializer.Deserialize<TPacket>(stream);
-                DeserializeHeader(ref spanBuffer, ref packet, sizeOfPacket, offset);
+                // 패킷 헤더 내용 구성 
+                DeserializeHeader(ref spanBuffer, packet, sizeOfPacket, offset);
                 return packet;
             }
         }
@@ -129,7 +135,7 @@ namespace ServerEngine.Network.Message
         /// <param name="packet"></param>
         /// <param name="sizeOfPacket"></param>
         /// <param name="offset"></param>
-        private void DeserializeHeader<TPacket>(ref ReadOnlySpan<byte> spanBuffer, ref TPacket packet, ushort sizeOfPacket, int offset) where TPacket : Packet
+        private void DeserializeHeader<TPacket>(ref ReadOnlySpan<byte> spanBuffer, TPacket packet, ushort sizeOfPacket, int offset) where TPacket : Packet
         {
             packet.SetSize(sizeOfPacket, false);
             offset += PacketHeaderInfo.MAX_PACKET_HEADER_SIZE;

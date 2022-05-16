@@ -20,7 +20,7 @@ namespace ServerEngine.Common
         [DllImport("kernel32", CharSet = CharSet.Unicode)]
         private static extern long GetPrivateProfileString(string section, string key, string def_value, StringBuilder retval, int size, string filePath);
 
-        private static object mLockObj = new object();
+        private static readonly object mLockObj = new object();
 
         /// <summary>
         /// Write xxx.ini file (non-threadsafe)

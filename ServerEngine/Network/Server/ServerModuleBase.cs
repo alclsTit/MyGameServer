@@ -149,7 +149,7 @@ namespace ServerEngine.Network.Server
             mNetworkSystem.StopCallback += OnNetworkSystemStopped;
         }
 
-        public void InitializeSessionManager(ServerSession.ISessionManager sessionManager)
+        public void InitializeSessionManager(ISessionManager sessionManager)
         {
             if (sessionManager == null)
                 throw new ArgumentNullException(nameof(sessionManager));
@@ -232,7 +232,7 @@ namespace ServerEngine.Network.Server
             return session;
         }
 
-        public void OnSessionClosed(Session session, eCloseReason reason)
+        public virtual void OnSessionClosed(Session session, eCloseReason reason)
         {
             if (session == null)
             {

@@ -15,7 +15,7 @@ namespace ServerEngine.Network.Message
         // [헤더] 1. 메시지 아이디
         [ProtoMember(1)]
         public ushort id { get; protected set; }
-        // [헤더] 2. 패킷 사이즈 - 패킷 사이즈는 id와 size 크기를 제외한 메시지 바디 크기
+        // [헤더] 2. 패킷 사이즈 - 패킷 사이즈는 헤더 + 바디 전체크기
         [ProtoMember(2)]
         public ushort size { get; protected set; }
         // [헤더] 3. 패킷 딜레이 체크를 위한 패킷 송신 전 시간

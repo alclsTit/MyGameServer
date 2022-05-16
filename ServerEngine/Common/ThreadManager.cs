@@ -59,6 +59,11 @@ namespace ServerEngine.Common
             Interlocked.Increment(ref msCustomThreadCount);
         }
 
+        public static bool RemoveThread(string name)
+        {
+            return mCustomThreads.Remove(name);
+        }
+
         public static bool IsThreadAlive(string name)
         {
             return mCustomThreads[name].IsAlive;
@@ -73,11 +78,6 @@ namespace ServerEngine.Common
         {
             foreach (var threadObj in mCustomThreads)
                 threadObj.Value.Start();
-        }
-
-        public static void StartThreadsAsync()
-        {
-            Task.Run(() => StartThreads());
         }
 
         public static IEnumerator<KeyValuePair<string, Thread>> GetCustomThreads()

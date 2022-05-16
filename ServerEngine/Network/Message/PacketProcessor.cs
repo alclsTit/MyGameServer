@@ -28,7 +28,7 @@ namespace ServerEngine.Network.Message
             return DateTime.Now.Ticks;
         }
 
-        private double GetPacketDelayTime(long arriveTime, long startTime)
+        public double GetPacketDelayTime(long arriveTime, long startTime)
         {
             TimeSpan diffTime = new TimeSpan(arriveTime - startTime);
             return diffTime.TotalSeconds;

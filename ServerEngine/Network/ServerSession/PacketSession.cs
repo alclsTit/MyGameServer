@@ -13,6 +13,9 @@ namespace ServerEngine.Network.ServerSession
 {
     public abstract class PacketSession : Session
     {
+        // 패킷 구조 =                헤더                       +       바디 
+        //            [패킷 바디사이즈 + 메시지 아이디 + 송신시간] + [실제 패킷 메시지]
+        // 서버에서 수신한 수신버퍼를 읽어 패킷 처리 진행
         public sealed override int OnReceive(ArraySegment<byte> buffer)
         {
             int processLength = 0;
@@ -31,6 +34,8 @@ namespace ServerEngine.Network.ServerSession
                 }
                 else 
                 {
+                    // 1. 수신된 데이터가 수신버퍼 사이즈를 초과하였는지 체크
+                    // 2. 수신된 패킷 사이즈가 SocketAsyncEventArgs 수신버퍼로 받은 바이트 수보다 큰지 체크
                     if (CheckRecvPacketValidate(buffer))
                     {
                         var offset = buffer.Offset;

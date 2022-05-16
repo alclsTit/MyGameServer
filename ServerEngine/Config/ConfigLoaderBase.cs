@@ -72,7 +72,7 @@ namespace ServerEngine.Config
         }
 
         /// <summary>
-        /// Config 파일에서 읽은 옵션 세팅
+        /// Config 파일에서 읽은 옵션 세팅 (서버 옵션 공통사항 로드 및 세팅)
         /// </summary>
         /// <typeparam name="T"></typeparam>
         /// <param name="item"></param>
@@ -130,6 +130,12 @@ namespace ServerEngine.Config
 
             // ThreadPool Control flag
             config.controlThreadPoolCount = Convert.ToBoolean(IniConfig.IniFileRead(key, "Control_ThreadPool", $"{config.controlThreadPoolCount}", mFilePath));
+
+            // Send Timeout 세팅
+            config.sendTimeout = Convert.ToInt32(IniConfig.IniFileRead(key, "Send_Timeout", $"{config.sendTimeout}", mFilePath));
+
+            // Recv Timeout 세팅
+            config.recvTimeout = Convert.ToInt32(IniConfig.IniFileRead(key, "Recv_Timeout", $"{config.recvTimeout}", mFilePath));
 
             item = config;
             return true;
