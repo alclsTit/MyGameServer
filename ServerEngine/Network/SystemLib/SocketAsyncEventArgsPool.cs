@@ -12,7 +12,8 @@ namespace ServerEngine.Network.SystemLib
     /// <summary>
     /// SocketAsyncEventArgs에 대한 ObjectPooling
     /// </summary>
-    public class SocketAsyncEventArgsPool
+    /// 사용하지 않음. Microsoft.Extensions.ObjectPool로 대체 
+    /*public class SocketAsyncEventArgsPool
     {
         /// <summary>
         /// SocketAsyncEventArgs 메모리 풀 객체
@@ -76,5 +77,6 @@ namespace ServerEngine.Network.SystemLib
 
         }
     }
+    */
 }
 
