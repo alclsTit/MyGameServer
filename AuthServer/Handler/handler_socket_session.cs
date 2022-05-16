@@ -23,9 +23,9 @@ namespace AuthServer.Handler
             {
                 var curtick = GetTickCount();
                 var notify_msg = PacketParser.Instance.BufferToMessage<Message_World.notify_socket_session_connected>(buffer);
-                
+
                 if (logger.IsDebugEnabled)
-                    Console.WriteLine($"[{notify_msg.remoteIP}] Socket Connected - [{notify_msg.id}]");
+                    Console.WriteLine($"[{notify_msg.remoteIP}] Socket Connected[{notify_msg.id}]({GetPacketDelayTime(curtick, notify_msg.checkTime)}): Packet Transmission Success!!!");
 
                 LogPacketDelayTime(curtick, notify_msg.checkTime);
             }
