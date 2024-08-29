@@ -123,18 +123,18 @@ namespace ServerEngine.Config
     #endregion
 
     #region ConfigLoader Function
-    class ConfigCommon
-    {
-        public bool LoadConfig<TConfig>(string file_name, ConfigLoader.eFileExtensionType type, [NotNullWhen(true)] out TConfig? config) 
-            where TConfig : class, new()
-        {
-            if (ConfigLoader.eFileExtensionType.none <= type || ConfigLoader.eFileExtensionType.Max >= type)
-                throw new ArgumentOutOfRangeException(nameof(type));
-
-            config = ConfigLoader.LoadJson<TConfig>(file_name, type);
-            return null != config ? true : false;
-        }
-    }
+    //class ConfigCommon
+    //{
+    //    public bool LoadConfig<TConfig>(string file_name, ConfigLoader.eFileExtensionType type, [NotNullWhen(true)] out TConfig? config) 
+    //        where TConfig : class, new()
+    //    {
+    //        if (ConfigLoader.eFileExtensionType.none <= type || ConfigLoader.eFileExtensionType.Max >= type)
+    //            throw new ArgumentOutOfRangeException(nameof(type));
+    //
+    //        config = ConfigLoader.LoadJson<TConfig>(file_name, type);
+    //        return null != config ? true : false;
+    //    }
+    //}
 
     /// <summary>
     /// json 형태의 config 파일을 모두 로드해오는 default 옵션
@@ -145,6 +145,24 @@ namespace ServerEngine.Config
         public void LoadConfigAll()
         {
 
+        }
+    }
+
+    public interface IConfigCommon
+    {
+        public IConfigNetwork config_network { get; }
+        public IConfigEtc config_etc { get; }
+    }
+
+    public class ConfigCommon : IConfigCommon
+    {
+        public IConfigNetwork config_network { get; }
+        public IConfigEtc config_etc { get; }
+
+        public ConfigCommon(IConfigNetwork config_network, IConfigEtc config_etc)
+        {
+            this.config_network = config_network;
+            this.config_etc = config_etc;
         }
     }
 

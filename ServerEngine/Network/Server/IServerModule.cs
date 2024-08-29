@@ -17,9 +17,9 @@ namespace ServerEngine.Network.Server
     /// </summary>
     public interface IServerModule
     {
-        string name { get; }
+        string Name { get; }
 
-        Logger logger { get; }
+        ILogger Logger { get; }
 
         IPEndPoint ipEndPoint { get; }
 

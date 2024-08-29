@@ -20,9 +20,9 @@ namespace ServerEngine.Network.Server
     {
         public int mState = ServerState.NotInitialized;
 
-        public string name { get; private set; }
+        public string Name { get; private set; }
 
-        public Logger logger { get; private set; }
+        public ILogger Logger { get; private set; }
 
         #region "2022.05.04 기존 커스텀 ObjectPool -> Microsoft.Extensions.ObjectPool로 변경에 따른 코드 주석처리"
         /*
@@ -53,12 +53,12 @@ namespace ServerEngine.Network.Server
         /// <summary>
         /// 해당 서버모듈에 연관된 리슨정보
         /// </summary>
-        public IListenInfo mListenInfo { get; private set; }
+        public IConfigListen mListenInfo { get; private set; }
 
         /// <summary>
         /// 모든 리슨정보
         /// </summary>
-        public List<IListenInfo> mListenInfoList { get; private set; }
+        public List<IConfigListen> mListenInfoList { get; private set; }
 
         public IPEndPoint ipEndPoint { get; private set; }
 
@@ -74,8 +74,9 @@ namespace ServerEngine.Network.Server
 
         public int GetServerState => mState;
 
-        protected ServerModuleBase()
+        protected ServerModuleBase(string name)
         {
+            this.Name = name;
             mStartTime = DateTime.Now;
             mLastActiveTime = mStartTime;
         }
@@ -92,13 +93,13 @@ namespace ServerEngine.Network.Server
             return false;
         }
 
-        public virtual void Initialize(List<IListenInfo> listenInfoList, IListenInfo listenInfo, ServerConfig serverInfo, INetworkSystemBase networkSystem, Logger logger, Func<Session> creater)
+        public virtual void Initialize(List<IConfigListen> listenInfoList, IConfigListen config_listen, ServerConfig serverInfo, INetworkSystemBase networkSystem, ILogger logger, Func<Session> creater)
         {
             if (listenInfoList == null)
                 throw new ArgumentNullException(nameof(listenInfoList));
 
-            if (listenInfo == null)
-                throw new ArgumentNullException(nameof(listenInfo));
+            if (config_listen == null)
+                throw new ArgumentNullException(nameof(config_listen));
 
             if (serverInfo == null)
                 throw new ArgumentNullException(nameof(serverInfo));
@@ -113,12 +114,11 @@ namespace ServerEngine.Network.Server
                 throw new ArgumentNullException(nameof(creater));
 
             mListenInfoList = listenInfoList;
-            mListenInfo = listenInfo;
-            name = listenInfo.serverName;
-            ipEndPoint = ServerHostFinder.GetServerIPAddress(listenInfo.port);
+            mListenInfo = config_listen;
+            ipEndPoint = ServerHostFinder.GetServerIPAddress(config_listen.port);
 
             mServerInfo = serverInfo;
-            this.logger = logger;
+            this.Logger = logger;
             
             mNetworkSystem = networkSystem;
 
@@ -140,12 +140,12 @@ namespace ServerEngine.Network.Server
             var oldState = ServerState.NotInitialized;
             if (!ChangeState(oldState, ServerState.Initialized))
             {
-                logger.Error(this.ClassName(), this.MethodName(), $"State is [{oldState}]. It can be [Initialized] when state is [NotInitialized]");
+                logger.Error($"Error in ServerModuleBase.Initialize() - State is [{oldState}]. It can be [Initialized] when state is [NotInitialized]");
                 return;
             }
 
             // 마지막에 초기화 진행
-            mNetworkSystem.Initialize(this, listenInfo, serverInfo, logger, creater);
+            mNetworkSystem.Initialize(this, config_listen, serverInfo, logger, creater);
             mNetworkSystem.StopCallback += OnNetworkSystemStopped;
         }
 
@@ -234,9 +234,9 @@ namespace ServerEngine.Network.Server
 
         public virtual void OnSessionClosed(Session session, eCloseReason reason)
         {
-            if (session == null)
+            if (null == session)
             {
-                logger.Error(this.ClassName(), this.MethodName(), "Session Object is null!!!");
+                Logger.Error($"Error in ServerModuleBase.OnSessionClosed() - Session is null!!!");
                 return;
             }
 
@@ -256,17 +256,17 @@ namespace ServerEngine.Network.Server
             mSessionManager.Close(session.mSessionID);
         }
 
-        private void OnNetworkSystemStopped(object sender, EventArgs e)
+        private void OnNetworkSystemStopped(object? sender, EventArgs e)
         {
-            if (logger.IsDebugEnabled)
-                logger.Debug($"[{mListenInfo.serverName}][{ipEndPoint.Address.ToString()}:{mListenInfo.port}] was stopped");
+            if (Logger.IsEnableDebug)
+                Logger.Debug($"[{this.Name}][{ipEndPoint.Address}:{ipEndPoint.Port}] was stopped");
         }
 
         public string GetConnectedServerName(EndPoint endPoint)
         {
             var ipEndPoint = (IPEndPoint)endPoint;
             var listenInfo = mListenInfoList.Find((item) => { return item.port == ipEndPoint.Port; });
-            return listenInfo != null ? listenInfo.serverName : default(string);    
+            return listenInfo != null ? Name : default(string);    
         }
 
     }
