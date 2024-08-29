@@ -14,14 +14,23 @@ namespace ServerEngine.Common
             return item.GetType().Name;
         }
 
-        public static string MethodName(this object item) 
+        public static string? MethodName(this object item) 
         {
-            var calledFuncName = new System.Diagnostics.StackFrame(1).GetMethod().Name;
+            var calledFuncName = new System.Diagnostics.StackFrame(1).GetMethod()?.Name;
             return calledFuncName;
         }
 
         public static void DoNotWait(this Task task)
         {
         }
+
+        #region TimeExtension
+        public static double ToUnixTime(this DateTime cur_datetime)
+        {
+            TimeSpan interval = cur_datetime - DateTime.UnixEpoch;
+            return interval.TotalSeconds;
+        }
+
+        #endregion
     }
 }

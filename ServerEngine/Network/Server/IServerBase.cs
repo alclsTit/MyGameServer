@@ -14,17 +14,15 @@ namespace ServerEngine.Network.Server
     /// </summary>
     public interface IServerBase
     {
-        // static 으로 선언하는걸로 바꿨기 때문에 인터페이스(인덱서, 프로퍼티, 메서드)에서 제외
         /// <summary>
-        /// logger 관련 logFactory(생성자) 및 logger(구체적 생성 객체)
+        /// Logger
         /// </summary>
-        ILogFactory logFactory { get; }
-        Logger logger { get; }
+        ILogger? Logger { get; }
 
         /// <summary>
         /// 서버 이름
         /// </summary>
-        string name { get; }
+        string? name { get; }
     }
 
 }

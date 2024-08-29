@@ -28,18 +28,17 @@ namespace ServerEngine.Network.Server
         /// <summary>
         /// logger 관련 logFactory(생성자) 및 logger(구체적 생성 객체)
         /// </summary>
-        public ILogFactory logFactory { get; private set; }
-        public Logger logger { get; private set; }
+        public ILogger Logger { get; private set; }
 
         /// <summary>
-        /// 서버 Listen 관련 옵션관리 컨테이너
+        /// 서버 Listen 관련 옵션관리 컨테이너 (여러개일수있다)
         /// </summary>
         public List<IListenInfo> mListenInfoList { get; private set; } = new List<IListenInfo>();
 
         /// <summary>
         /// 문자 인코딩 방식(utf-8, utf-16...)
         /// </summary>
-        public Encoding mTextEncoding { get; protected set; }
+        public Encoding mTextEncoding { get; protected set; } = Encoding.UTF8;
 
         /// <summary>
         /// 서버 상태
@@ -49,28 +48,36 @@ namespace ServerEngine.Network.Server
         /// <summary>
         /// 서버 이름(RelayServer, AuthServer...)
         /// </summary>
-        public string name { get; protected set; }
+        public string? name { get; private set; }
 
         /// <summary>
         /// 서버 응용프로그램 위에서 작동되는 여러 서버모듈(클라이언트와 실제 통신 진행)
         /// </summary>
-        protected List<IServerModule> mServerModuleList;
+        protected List<IServerModule>? mServerModuleList;
 
-        public virtual bool Initialize(string nameOfConsoleTitle, string serverName, ILogFactory logFactory)
+        protected ServerBase(ILogger logger)
         {
+            this.Logger = logger;
+        }
+
+        public virtual bool Initialize(string name)
+        {
+            if (string.IsNullOrEmpty(name))
+                throw new ArgumentNullException(nameof(name));
+
             //.NetCore는 .NetFramework와는 다르게 assemblyinfo 파일을 자동으로 구성.전체 구성은 csproj에서... 별도로 log4net 수동으로 로드진행 
-            var logRepository = log4net.LogManager.GetRepository(System.Reflection.Assembly.GetEntryAssembly());
-            log4net.Config.XmlConfigurator.Configure(logRepository, new FileInfo("log4net.config"));
+            //var logRepository = log4net.LogManager.GetRepository(System.Reflection.Assembly.GetEntryAssembly());
+            //log4net.Config.XmlConfigurator.Configure(logRepository, new FileInfo("log4net.config"));
 
-            this.logFactory = logFactory ?? new ConsoleLoggerFactory();
-            logger = this.logFactory.GetLogger(nameof(ServerBase), nameOfConsoleTitle);
+            //this.logFactory = logFactory ?? new LoggerFactory();
+            //logger = this.logFactory.GetLogger(nameof(ServerBase), nameOfConsoleTitle);
 
-            if (logger == null)
-                return false;
+            //if (logger == null)
+            //    return false;
 
-            name = serverName;
+            this.name = name;
 
-            Message.PacketProcessorManager.Instance.Initialize(logger);
+            Message.PacketProcessorManager.Instance.Initialize(logger: Logger);
             
             return true;
         }
@@ -105,28 +112,28 @@ namespace ServerEngine.Network.Server
             // 1. Config 파일 세팅
             if (!SetupServerConfig(config))
             {
-                logger.Error(this.ClassName(), this.MethodName(), "Fail to setup [SetupServerConfig]!!!");
+                Logger.Error("Error in ServerBase.Setup() overload_1 - Fail to setup [SetupServerConfig]!!!");
                 return false;
             }
 
             // 2. Listener 세팅
             if (!SetupListener(listenInfo))
             {
-                logger.Error(this.ClassName(), this.MethodName(), "Fail to setup [SetupListener]!!!");
+                Logger.Error("Error in ServerBase.Setup() overload_1 - Fail to setup [SetupListener]!!!");
                 return false;
             }
 
             // 3. ServerModule 세팅
             if (!SetupSocketServer<TServerModule, TServerInfo, TNetworkSystem>(config, creater))
             {
-                logger.Error(this.ClassName(), this.MethodName(), "Fail to setup [SetupSocketServer]!!!");
+                Logger.Error("Error in ServerBase.Setup() overload_1 - Fail to setup [SetupSocketServer]!!!");
                 return false;
             }
 
             // 4. 패킷 송수신(Accept, Connect) 관련 Thread 세팅
             if (!SetupThreads())
             {
-                logger.Error(this.ClassName(), this.MethodName(), "Fail to setup [SetupThreads]!!!");
+                Logger.Error("Error in ServerBase.Setup() overload_1 - Fail to setup [SetupThreads]!!!");
                 return false;
             }
 
@@ -159,28 +166,28 @@ namespace ServerEngine.Network.Server
             // 1. Config 파일 세팅
             if (!SetupServerConfig(config))
             {
-                logger.Error(this.ClassName(), this.MethodName(), "Fail to setup [SetupServerConfig]!!!");
+                Logger.Error("Error in ServerBase.Setup() overload_2 - Fail to setup [SetupServerConfig]!!!");
                 return false;
             }
 
             // 2. Listener 세팅
             if (!SetupListener(ip, port, serverName, backlog, nodelay))
             {
-                logger.Error(this.ClassName(), this.MethodName(), "Fail to setup [SetupListener]!!!");
+                Logger.Error("Error in ServerBase.Setup() overload_2 - Fail to setup [SetupListener]!!!");
                 return false;
             }
 
             // 3. ServerModule 세팅
             if (!SetupSocketServer<TServerModule, TServerInfo, TNetworkSystem>(config, creater))
             {
-                logger.Error(this.ClassName(), this.MethodName(), "Fail to setup [SetupSocketServer]!!!");
+                Logger.Error("Error in ServerBase.Setup() overload_2 - Fail to setup [SetupSocketServer]!!!");
                 return false;
             }
 
             // 4. 패킷 송수신(Accept, Connect) 관련 Thread 세팅
             if (!SetupThreads())
             {
-                logger.Error(this.ClassName(), this.MethodName(), "Fail to setup [SetupThreads]!!!");
+                Logger.Error("Error in ServerBase.Setup() overload_2 - Fail to setup [SetupThreads]!!!");
                 return false;
             }
 
@@ -200,7 +207,7 @@ namespace ServerEngine.Network.Server
             var oldState = ServerState.Initialized;
             if (!ChangeState(oldState, ServerState.SetupFinished))
             {
-                logger.Error(this.ClassName(), this.MethodName(), $"State is [{oldState}]. It can be [SetupFinished] when state is [Initialized]");
+                Logger.Error($"Error in ServerBase.SetupAfterCheck() - State is [{oldState}]. It can be [SetupFinished] when state is [Initialized]");
                 return false;
             }
 
@@ -246,7 +253,7 @@ namespace ServerEngine.Network.Server
                     }
                     else
                     {
-                        logger.Warn(this.ClassName(), this.MethodName(), "Fail to set [ThreadPoolEx.ResetThreadPoolInfo], working default ThreadPool count!!!");
+                        Logger.Warn("Warning in ServerBase.SetupServerConfig() - Fail to set [ThreadPoolEx.ResetThreadPoolInfo], working default ThreadPool count!!!");
                     }
                 }
             }
@@ -271,19 +278,17 @@ namespace ServerEngine.Network.Server
         /// <param name="listenInfoList"></param>
         /// <returns></returns>
         /// <exception cref="ArgumentNullException"></exception>
-        private bool SetupListener(List<IListenInfo> listenInfoList)
+        private bool SetupListener(List<IListenInfo> listen_list)
         {
-            if (listenInfoList == null)
-                throw new ArgumentNullException(nameof(listenInfoList));
+            if (null == listen_list || 0 >= listen_list.Count)
+                throw new ArgumentNullException(nameof(listen_list));
 
-            if (listenInfoList.Count <= 0)
-                return false;
-
-            foreach (var listenInfo in listenInfoList)
+            foreach (var listener in listen_list)
             {
-                if (string.IsNullOrEmpty(listenInfo.ip))
+                if (string.IsNullOrEmpty(listener.ip))
                 {
-                    logger.Error(this.ClassName(), this.MethodName(), $"Fail to set IP - [{listenInfo.serverName}] is null!!!");
+                    Logger?.Error("Error in ServerBase.SetupListener")
+                    Logger?.Error(this.ClassName(), this.MethodName(), $"Fail to set IP - [{listenInfo.serverName}] is null!!!");
                     return false;
                 }
 

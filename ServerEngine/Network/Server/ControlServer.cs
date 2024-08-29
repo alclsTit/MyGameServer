@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection.Metadata.Ecma335;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -14,9 +15,11 @@ namespace ServerEngine.Network.Server
     /// </summary>
     public class ControlServer : ServerBase
     {
-        public override bool Initialize(string nameOfConsoleTitle, string serverName, ILogFactory logFactory = null)
+        public ControlServer(ILogger logger) : base(logger) { }
+
+        public override bool Initialize(string name)
         {
-            if (!base.Initialize(nameOfConsoleTitle, serverName, logFactory))
+            if (!base.Initialize(name))
                 return false;
 
             mServerState = ServerState.Initialized;

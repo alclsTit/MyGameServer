@@ -3,17 +3,48 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using ServerEngine.Config;
 
 namespace ServerEngine.Log
 {
     /// <summary>
     /// LogFactory 객체 생성 구현 파생클래스 
     /// </summary>
-    public class ConsoleLoggerFactory : ILogFactory
+    public class LoggerFactory : ILogFactory
     {
-        public Logger GetLogger(string name, string nameOfConsoleTitle)
+        /// <summary>
+        /// Log4Net을 사용한 Logger
+        /// </summary>
+        /// <param name="name"></param>
+        /// <returns></returns>
+        public ILogger GetLogger(string name)
         {
-            return new ConsoleLogger(name, nameOfConsoleTitle);
+           return new ConsoleLogger(name);
+        }
+
+        /// <summary>
+        /// SeriLog를 사용한 Logger
+        /// </summary>
+        /// <param name="path"></param>
+        /// <param name="name"></param>
+        /// <param name="config"></param>
+        /// <param name="output_format"></param>
+        /// <returns></returns>
+
+        public ILogger GetLogger(string path, string? name, Config.Logger? config = default, SeriLogger.eOutputFormat output_format = SeriLogger.eOutputFormat.Text)
+        {
+            var root_path = Path.GetDirectoryName(System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName);
+            var log_path = Path.Join(root_path, "logs");
+
+            var config_etc = ConfigLoader.LoadJson<ConfigEtc>("config_etc", ConfigLoader.eFileExtensionType.json);
+            if (null != config_etc)
+            {
+                return new ConsoleFileLogger(log_path, config_etc.name, config_etc.logger, output_format);
+            }
+            else
+            {
+                return new ConsoleFileLogger(log_path);
+            }
         }
     }
 
@@ -25,120 +56,158 @@ namespace ServerEngine.Log
     /// </summary>
     public sealed class ConsoleLogger : Logger
     {
-        public ConsoleLogger(String name, string nameOfConsoleTitle) : base(name)
-        {
-            if (!string.IsNullOrEmpty(nameOfConsoleTitle))
-                Console.Title = nameOfConsoleTitle; 
-        }
+        public ConsoleLogger(string name) : base(name) { }
 
-        public override void Debug(object message)
-        {
-            base.Debug(message);
-        }
-
-        public override void Debug(object message, Exception exception)
+        #region Debug
+        public override void Debug(string message, System.Exception? exception = default)
         {
             base.Debug(message, exception);
         }
-
-        public override void Info(object message)
+        public override void Debug(string message, string class_name, string method_name, Exception? exception = default)
         {
-            base.Info(message);
+            base.Debug(message, class_name, method_name, exception);
         }
+        #endregion
 
-        public override void Info(object message, Exception exception)
+        #region Info
+        public override void Info(string message, System.Exception? exception = default)
         {
             base.Info(message, exception);
         }
-
-        public override void Warn(object message)
+        public override void Info(string message, string class_name, string method_name, Exception? exception = default)
         {
-            base.Warn(message);
+            base.Info(message, class_name, method_name, exception);
         }
+        #endregion
 
-        public override void Warn(object message, Exception exception)
+        #region Warn
+        public override void Warn(string message, Exception? exception = default)
         {
             base.Warn(message, exception);
         }
 
-        public override void Error(object message)
+        public override void Warn(string message, string class_name, string method_name, System.Exception? exception = default)
         {
-            Console.BackgroundColor = ConsoleColor.Yellow;
-            Console.ForegroundColor = ConsoleColor.Red;
-
-            base.Error(message);
-
-            Console.ResetColor();
+            base.Warn(message, class_name, method_name, exception);
         }
+        #endregion
 
-        public override void Error(object message, Exception exception)
+        #region Error
+        public override void Error(string message, Exception? exception = default)
         {
-            Console.BackgroundColor = ConsoleColor.Yellow;
-            Console.ForegroundColor = ConsoleColor.Red;
-
             base.Error(message, exception);
-
-            Console.ResetColor();
         }
-
-        public override void Error(string nameOfClass, string nameOfMethod, string message = "")
+        public override void Error(string message, string class_name, string method_name, System.Exception? exception = default)
         {
             Console.BackgroundColor = ConsoleColor.Yellow;
             Console.ForegroundColor = ConsoleColor.Red;
 
-            base.Error(nameOfClass, nameOfMethod, message);
+            base.Error(message, class_name, method_name, exception);
 
             Console.ResetColor();
         }
+        #endregion
 
-        public override void Error(string nameOfClass, string nameOfMethod, Exception exception, string message = "")
+        #region Fatal
+        public override void Fatal(string message, Exception? exception = default)
         {
-            Console.BackgroundColor = ConsoleColor.Yellow;
-            Console.ForegroundColor = ConsoleColor.Red;
-
-            base.Error(nameOfClass, nameOfMethod, exception, message);
-
-            Console.ResetColor();
-        }
-
-        public override void Fatal(object message)
-        {
-            Console.BackgroundColor = ConsoleColor.Black;
-            Console.ForegroundColor = ConsoleColor.Red;
-
-            base.Fatal(message);
-
-            Console.ResetColor();
-        }
-
-        public override void Fatal(object message, Exception exception)
-        {
-            Console.BackgroundColor = ConsoleColor.Black;
-            Console.ForegroundColor = ConsoleColor.Red;
-
             base.Fatal(message, exception);
-
-            Console.ResetColor();
         }
-
-        public override void Fatal(string nameOfClass, string nameOfMethod, string message = "")
+        public override void Fatal(string message, string class_name, string method_name, System.Exception? exception = default)
         {
             Console.BackgroundColor = ConsoleColor.Black;
             Console.ForegroundColor = ConsoleColor.Red;
 
-            base.Fatal(nameOfClass, nameOfMethod, message);
+            base.Fatal(message, class_name, method_name, exception);
 
             Console.ResetColor();
         }
+        #endregion
+    }
 
-        public override void Fatal(string nameOfClass, string nameOfMethod, Exception exception, string message = "")
+
+    public sealed class ConsoleFileLogger : SeriLogger
+    {
+        private bool mDisposed = false;
+
+        public ConsoleFileLogger(string path, string? name = default, Config.Logger? config = default, eOutputFormat output_format = eOutputFormat.Text) 
+            : base(path, name, config, output_format) 
+        { 
+        }
+
+        #region Debug
+        public override void Debug(string message, Exception? exception = default)
         {
-            Console.BackgroundColor = ConsoleColor.Black;
-            Console.ForegroundColor = ConsoleColor.Red;
+            base.Debug(message, exception);
+        }
+        public override void Debug(string message, string class_name, string method_name, Exception? exception = default)
+        {
+            base.Debug(message, class_name, method_name, exception);
+        }
+        #endregion
 
-            base.Fatal(nameOfClass, nameOfMethod, exception, message);
+        #region Info
+        public override void Info(string message, Exception? exception = default)
+        {
+            base.Info(message, exception);
+        }
+        public override void Info(string message, string class_name, string method_name, Exception? exception = default)
+        {
+            base.Info(message, class_name, method_name, exception);
+        }
+        #endregion
 
-            Console.ResetColor();
+        #region Warn
+        public override void Warn(string message, Exception? exception = default)
+        {
+            base.Warn(message, exception);
+        }
+        public override void Warn(string message, string class_name, string method_name, Exception? exception = default)
+        {
+            base.Warn(message, class_name, method_name, exception);
+        }
+        #endregion
+
+        #region Error
+        public override void Error(string message, Exception? exception = default)
+        {
+            base.Error(message, exception);
+        }
+        public override void Error(string message, string class_name, string method_name, Exception? exception = default)
+        {
+            base.Error(message, class_name, method_name, exception);
+        }
+        #endregion
+
+        #region Fatal
+        public override void Fatal(string message, Exception? exception = default)
+        {
+            base.Fatal(message, exception);
+        }
+        public override void Fatal(string message, string class_name, string method_name, Exception? exception = default)
+        {
+            base.Fatal(message, class_name, method_name, exception);
+        }
+        #endregion
+
+        public override void Dispose()
+        {
+            if (mDisposed)
+                return;
+
+            mDisposed = true;
+            
+            base.Dispose();
+        }
+
+        public override ValueTask DisposeAsync()
+        {
+            if (mDisposed)
+                return default;
+
+            mDisposed = true;
+            
+            return base.DisposeAsync();   
         }
     }
 }

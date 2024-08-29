@@ -158,4 +158,90 @@ namespace ServerEngine.Config
 
     }
     */
+
+    public static class ConfigLoader
+    {
+        public enum eFileExtensionType
+        {
+            none = 0,
+            json = 1,
+            Max = 2
+        }
+
+        private static string? Find(in string file_name, in eFileExtensionType type)
+        {
+            try
+            {
+                // 현재 실행중인 프로세스의 실행파일이 있는 위치 로드
+                var root_path = Path.GetDirectoryName(System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName);
+                if (string.IsNullOrEmpty(root_path))
+                    return null;
+
+                string filename_extension;
+                switch (type)
+                {
+                    case eFileExtensionType.json:
+                        filename_extension = $"{file_name}.json";
+                        break;
+                    default:
+                        return null;
+                }
+
+                // 폴더 존재유무 체크 및 없다면 생성
+                string folder_path = Path.Join(root_path, "data");
+                if (!Directory.Exists(folder_path))
+                    Directory.CreateDirectory(folder_path);
+          
+                // 파일 존재유무 체크 및 없다면 생성
+                string file_path = Path.Join(folder_path, filename_extension);
+                if (!File.Exists(file_path))
+                    File.Create(file_path);
+
+                return file_path;
+            }
+            catch (Exception)
+            {
+                throw;
+            }
+        }
+
+        #region Json
+        private static T? ConvertJsonToObject<T>(in string file_path) where T : class
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(file_path))
+                    return default(T);
+
+                return Newtonsoft.Json.JsonConvert.DeserializeObject<T>(File.ReadAllText(file_path));
+            }
+            catch (Exception)
+            {
+                throw;
+            }
+        }
+
+        public static T? LoadJson<T>(in string file_name, in eFileExtensionType type) where T : class
+        {
+            try
+            {
+                var filepath = Find(file_name, type);
+                if (null == filepath)
+                    return default;
+
+                switch (type)
+                {
+                    case eFileExtensionType.json:
+                        return ConvertJsonToObject<T>(filepath);
+                    default:
+                        return default;
+                }
+            }
+            catch (Exception)
+            {
+                throw;
+            }
+        }
+        #endregion
+    }
 }

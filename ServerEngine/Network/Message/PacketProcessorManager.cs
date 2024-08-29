@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using ServerEngine.Log;
 
 namespace ServerEngine.Network.Message
 {
@@ -26,7 +27,7 @@ namespace ServerEngine.Network.Message
         /// <summary>
         /// 외부에서 가져온 로거 세팅
         /// </summary>
-        private ServerEngine.Log.Logger logger;
+        private ILogger? Logger;
 
         /// <summary>
         /// 전역으로 하나의 객체만 사용. 외부에서 패킷메시지를 등록하여 이곳에서 전체관리
@@ -37,9 +38,9 @@ namespace ServerEngine.Network.Message
 
         public bool IsExist(ushort id) => mProcessor.ContainsKey(id);
 
-        internal void Initialize(ServerEngine.Log.Logger logger)
+        internal void Initialize(ILogger logger)
         {
-            this.logger = logger;
+            Logger = logger;
         }
 
         private void RegisterProcessor(ushort id, ProcessFunc func)
