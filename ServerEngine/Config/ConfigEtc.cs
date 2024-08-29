@@ -1,0 +1,88 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Text;
+using System.Threading.Tasks;
+
+namespace ServerEngine.Config
+{
+    #region Config - Data
+    public interface IConfigLog
+    {
+        public string name { get; }
+        public int file_minlevel { get; }
+        public int console_minlevel { get; }
+        public int rolling_interval { get; }
+    }
+    public class DefaultConfigLog : IConfigLog
+    {
+        public string name { get; }
+        public int file_minlevel { get; }   
+        public int console_minlevel { get; }
+        public int rolling_interval { get; }    
+        public DefaultConfigLog(string name, int file_minlevel, int console_minlevel, int rolling_interval)
+        {
+            this.name = name;
+            this.file_minlevel = file_minlevel;
+            this.console_minlevel = console_minlevel;
+            this.rolling_interval = rolling_interval;
+        }
+    }
+    public class DefaultLogger
+    {
+        public List<DefaultConfigLog> list { get; } = new List<DefaultConfigLog>();
+    }
+
+    public interface IConfigPool
+    {
+        public string name { get; }
+        public long default_size { get; }
+        public long create_size { get; }
+    }
+    public class DefaultConfigPool : IConfigPool
+    {
+        public string name { get; }
+        public long default_size { get; }   
+        public long create_size { get; }
+        public DefaultConfigPool(string name, long default_size, long create_size)
+        {
+            this.name = name;
+            this.default_size = default_size;
+            this.create_size = create_size;
+        }
+    }
+    public interface IPool
+    {
+        public Dictionary<string, IConfigPool> pools { get; }
+    }
+    public class DefaultPool : IPool
+    {
+        public Dictionary<string, IConfigPool> pools { get; }
+        public DefaultPool(Dictionary<string, IConfigPool> pools)
+        {
+            this.pools = pools;
+        }
+    }
+    #endregion
+
+    #region ConfigEtc
+    public interface IConfigEtc
+    {
+        public string name { get; }
+        public IPool pools { get; }
+    }
+
+    public class DefaultConfigEtc : IConfigEtc
+    {
+        public string name { get; }
+        public IPool pools { get; }
+
+        public DefaultConfigEtc(string name, IPool pools)
+        {
+            this.name = name;
+            this.pools = pools;
+        }
+    }
+    #endregion
+}
