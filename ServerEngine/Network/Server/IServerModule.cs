@@ -5,7 +5,6 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Net;
 
-using ServerEngine.Log;
 using ServerEngine.Network.SystemLib;
 using ServerEngine.Network.ServerSession;
 
@@ -19,7 +18,7 @@ namespace ServerEngine.Network.Server
     {
         string Name { get; }
 
-        ILogger Logger { get; }
+        public Log.ILogger Logger { get; set; }
 
         IPEndPoint ipEndPoint { get; }
 

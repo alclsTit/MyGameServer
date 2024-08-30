@@ -211,7 +211,7 @@ namespace ServerEngine.Log
         }
         #endregion
 
-        public SeriLogger(string path, string? name = default, Config.Logger? config = default, eOutputFormat output_format = eOutputFormat.Text)
+        public SeriLogger(string path, string? name = default, Config.ILogger? config = default, eOutputFormat output_format = eOutputFormat.Text)
         {
             var output_template = "[{Timestamp:yyyy-MM-dd HH:mm:ss:ff}][{Level:u15}][{ProcessName}_{ProcessId}][{ThreadId}] {Message:lj}{NewLine}{Exception}";
 
@@ -272,7 +272,7 @@ namespace ServerEngine.Log
         /// <param name="config">타겟 config 파일이 포함된 logger config</param>
         /// <param name="config_data">타겟 config 파일. 메서드가 true인경우 config_data는 null이 아니다. 반환값이 true면 null검사를 수행하지 않는다</param>
         /// <returns></returns>
-        private bool GetConfig(string name, Config.Logger config, [NotNullWhen(true)] out ConfigLog? config_data)
+        private bool GetConfig(string name, Config.ILogger config, [NotNullWhen(true)] out IConfigLog? config_data)
         {
             var _config_data = config.list.Find(e => e.name == name.ToLower().Trim());
             if (default != _config_data)

@@ -27,7 +27,7 @@ namespace ServerEngine.Network.Server
             return true;
         }
 
-        public override bool Setup<TServerModule, TServerInfo, TNetworkSystem>(List<IListenInfo> listenInfo, TServerInfo config, Func<ServerEngine.Network.ServerSession.Session> creater)
+        public override bool Setup<TServerModule, TServerInfo, TNetworkSystem>(List<IConfigListen> listenInfo, TServerInfo config, Func<ServerEngine.Network.ServerSession.Session> creater)
         {
             if (!base.Setup<TServerModule, TServerInfo, TNetworkSystem>(listenInfo, config, creater))
                 return false;

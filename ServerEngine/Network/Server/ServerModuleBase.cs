@@ -11,8 +11,8 @@ using Microsoft.Extensions.ObjectPool;
 using ServerEngine.Common;
 using ServerEngine.Log;
 using ServerEngine.Network.SystemLib;
-using ServerEngine.Config;
 using ServerEngine.Network.ServerSession;
+using ServerEngine.Config;
 
 namespace ServerEngine.Network.Server
 {
@@ -22,7 +22,7 @@ namespace ServerEngine.Network.Server
 
         public string Name { get; private set; }
 
-        public ILogger Logger { get; private set; }
+        public Log.ILogger Logger { get; set; }
 
         #region "2022.05.04 기존 커스텀 ObjectPool -> Microsoft.Extensions.ObjectPool로 변경에 따른 코드 주석처리"
         /*
@@ -93,7 +93,7 @@ namespace ServerEngine.Network.Server
             return false;
         }
 
-        public virtual void Initialize(List<IConfigListen> listenInfoList, IConfigListen config_listen, ServerConfig serverInfo, INetworkSystemBase networkSystem, ILogger logger, Func<Session> creater)
+        public virtual void Initialize(List<IConfigListen> listenInfoList, IConfigListen config_listen, ServerConfig serverInfo, INetworkSystemBase networkSystem, Log.ILogger logger, Func<Session> creater)
         {
             if (listenInfoList == null)
                 throw new ArgumentNullException(nameof(listenInfoList));

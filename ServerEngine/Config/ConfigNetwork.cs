@@ -96,7 +96,7 @@ namespace ServerEngine.Config
     public interface IConfigNetwork
     {
         public string name { get; }
-        public int io_thread_count { get; }
+        public int max_io_thread_count { get; }
 
         public IConfigListen config_listen { get; }
         public IConfigSocket config_socket { get; }

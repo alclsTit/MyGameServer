@@ -17,7 +17,7 @@ namespace ServerEngine.Network.Server
         /// <summary>
         /// Logger
         /// </summary>
-        ILogger? Logger { get; }
+        Log.ILogger? Logger { get; }
 
         /// <summary>
         /// ServerName

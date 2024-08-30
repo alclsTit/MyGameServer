@@ -14,17 +14,16 @@ namespace ServerEngine.Network.Message
 {
     public class SendWorker
     {
-        public int IOThreadCount { get; private set; }
-        // ConcurrentDictionary offers thread-safe index access
-        public ConcurrentDictionary<int, Channel<ArraySegment<byte>>> SendQueueConcurrentDic { get; private set; } 
+        public readonly int MaxIOThreadCount;
+        public ConcurrentDictionary<int, Channel<ArraySegment<byte>>> SendQueueConcurrentDic { get; private set; } // ConcurrentDictionary offers thread-safe index access
 
         public SendWorker(IConfigNetwork config_network)
         {
             var config_socket = config_network.config_socket;
-            IOThreadCount = config_network.io_thread_count;
+            MaxIOThreadCount = config_network.max_io_thread_count;
             SendQueueConcurrentDic = new ConcurrentDictionary<int, Channel<ArraySegment<byte>>>();
 
-            for (var i = 0; i < config_network.io_thread_count; ++i)
+            for (var i = 0; i < config_network.max_io_thread_count; ++i)
             {
                 var channel = Channel.CreateBounded<ArraySegment<byte>>(capacity: config_socket.send_buff_size);
                 SendQueueConcurrentDic.TryAdd(i, channel);
@@ -36,7 +35,7 @@ namespace ServerEngine.Network.Message
             if (null == buffer.Array)
                 throw new ArgumentNullException(nameof(buffer));
 
-            if (index < 0 || index > IOThreadCount)
+            if (index < 0 || index > MaxIOThreadCount)
                 throw new ArgumentException(nameof(index));
 
             SendQueueConcurrentDic[index].Writer.TryWrite(buffer);
@@ -47,7 +46,7 @@ namespace ServerEngine.Network.Message
             if (null == buffer.Array)
                 throw new ArgumentNullException(nameof(buffer));
 
-            if (index < 0 || index > IOThreadCount)
+            if (index < 0 || index > MaxIOThreadCount)
                 throw new ArgumentException(nameof(index));
 
             return SendQueueConcurrentDic[index].Writer.WriteAsync(buffer);
@@ -69,15 +68,5 @@ namespace ServerEngine.Network.Message
         }
 
 
-        public void Update(int index)
-        {
-            while(true)
-            {
-                SendQueueConcurrentDic[index]
-
-
-                Thread.Sleep(10);
-            }
-        }
     }
 }

@@ -28,7 +28,7 @@ namespace ServerEngine.Network.Server
         /// <summary>
         /// logger 관련 logFactory(생성자) 및 logger(구체적 생성 객체)
         /// </summary>
-        public ILogger Logger { get; private set; }
+        public Log.ILogger Logger { get; private set; }
 
         /// <summary>
         /// server configuration

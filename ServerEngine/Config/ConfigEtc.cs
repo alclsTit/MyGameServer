@@ -29,9 +29,17 @@ namespace ServerEngine.Config
             this.rolling_interval = rolling_interval;
         }
     }
-    public class DefaultLogger
+    public interface ILogger
     {
-        public List<DefaultConfigLog> list { get; } = new List<DefaultConfigLog>();
+        public List<IConfigLog> list { get; } 
+    }
+    public class DefaultLogger : ILogger
+    {
+        public List<IConfigLog> list { get; }
+        public DefaultLogger(List<IConfigLog> list)
+        {
+            this.list = list;
+        }
     }
 
     public interface IConfigPool
@@ -71,17 +79,20 @@ namespace ServerEngine.Config
     {
         public string name { get; }
         public IPool pools { get; }
+        public ILogger logger { get; }
     }
 
     public class DefaultConfigEtc : IConfigEtc
     {
         public string name { get; }
         public IPool pools { get; }
+        public ILogger logger { get; }
 
-        public DefaultConfigEtc(string name, IPool pools)
+        public DefaultConfigEtc(string name, IPool pools, ILogger logger)
         {
             this.name = name;
             this.pools = pools;
+            this.logger = logger;
         }
     }
     #endregion

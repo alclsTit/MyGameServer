@@ -27,16 +27,15 @@ namespace ServerEngine.Log
         /// </summary>
         /// <param name="path"></param>
         /// <param name="name"></param>
-        /// <param name="config"></param>
         /// <param name="output_format"></param>
         /// <returns></returns>
 
-        public ILogger GetLogger(string path, string? name, Config.Logger? config = default, SeriLogger.eOutputFormat output_format = SeriLogger.eOutputFormat.Text)
+        public ILogger GetLogger(string path, string? name, Config.ILogger? config = default, SeriLogger.eOutputFormat output_format = SeriLogger.eOutputFormat.Text)
         {
             var root_path = Path.GetDirectoryName(System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName);
             var log_path = Path.Join(root_path, "logs");
 
-            var config_etc = ConfigLoader.LoadJson<ConfigEtc>("config_etc", ConfigLoader.eFileExtensionType.json);
+            var config_etc = ConfigLoader.LoadJson<IConfigEtc>("config_etc", ConfigLoader.eFileExtensionType.json);
             if (null != config_etc)
             {
                 return new ConsoleFileLogger(log_path, config_etc.name, config_etc.logger, output_format);
@@ -130,7 +129,7 @@ namespace ServerEngine.Log
     {
         private bool mDisposed = false;
 
-        public ConsoleFileLogger(string path, string? name = default, Config.Logger? config = default, eOutputFormat output_format = eOutputFormat.Text) 
+        public ConsoleFileLogger(string path, string? name = default, Config.ILogger? config = default, eOutputFormat output_format = eOutputFormat.Text) 
             : base(path, name, config, output_format) 
         { 
         }

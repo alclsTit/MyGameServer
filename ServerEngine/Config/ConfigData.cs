@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 
 namespace ServerEngine.Config
 {
-    #region ConfigEtc - Log
+    /*#region ConfigEtc - Log
     public class ConfigLog
     {
         public readonly string name;
@@ -121,6 +121,7 @@ namespace ServerEngine.Config
         }
     }
     #endregion
+    */
 
     #region ConfigLoader Function
     //class ConfigCommon
