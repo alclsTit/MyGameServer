@@ -96,6 +96,8 @@ namespace ServerEngine.Config
     public interface IConfigNetwork
     {
         public string name { get; }
+        public int io_thread_count { get; }
+
         public IConfigListen config_listen { get; }
         public IConfigSocket config_socket { get; }
         public IConfigSession config_session { get; }
@@ -104,16 +106,19 @@ namespace ServerEngine.Config
     public class DefaultConfigNetwork : IConfigNetwork
     {
         public string name { get; }
+        public int io_thread_count { get; }
+
         public IConfigListen config_listen { get; }
         public IConfigSocket config_socket { get; }
         public IConfigSession config_session { get; }
 
         // 사용자정의 config 옵션멤버 추가
 
-        public DefaultConfigNetwork(string name, IConfigListen config_listen, IConfigSocket config_socket, 
+        public DefaultConfigNetwork(string name, int io_thread_count, IConfigListen config_listen, IConfigSocket config_socket, 
                                     IConfigSession config_session)
         {
             this.name = name;
+            this.io_thread_count = io_thread_count;
             this.config_listen = config_listen;
             this.config_socket = config_socket;
             this.config_session = config_session;

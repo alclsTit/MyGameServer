@@ -8,40 +8,36 @@ using System.Net.Sockets;
 using ServerEngine.Common;
 using ServerEngine.Config;
 using ServerEngine.Log;
+using System.Configuration;
 
 namespace ServerEngine.Network.SystemLib
 {
-    public class TCPSocket : SocketBase
+    public class TcpSocket : SocketBase
     {
-        public void Initialize(Socket clientSocket, ServerConfig config, Logger logger)
+        public TcpSocket(Socket socket, ILogger logger) 
+            : base(socket: socket, logger: logger)
         {
-            base.logger = logger;
-            mRawSocket = clientSocket;
-            SetSocketOption(config);
         }
 
-        /// <summary>
-        /// TCP Socket 옵션 세팅하는 부분. 일단 config 파일을 통한 내부에서만 옵션 세팅 가능하도록 작업
-        /// </summary>
-        /// <param name="config"></param>
-        private void SetSocketOption(ServerConfig config)
+        public override void SetSocketOption(IConfigNetwork config_network)
         {
-            if (config.nodelay)
-                mRawSocket.NoDelay = true;
+            if (null == mRawSocket)
+                throw new NullReferenceException(nameof(mRawSocket));
 
-            mRawSocket.ReceiveBufferSize = config.recvBufferSize > 0 ? config.recvBufferSize : config.DefaultRecvBufferSize;
-            mRawSocket.SendBufferSize = config.sendBufferSize > 0 ? config.sendBufferSize : config.DefaultSendBufferSize;
+            var config_socket = config_network.config_socket;
 
-            mRawSocket.SendTimeout = config.sendTimeout > 0 ? config.sendTimeout : config.DefaultSendTimeout;
-            mRawSocket.ReceiveTimeout = config.recvTimeout > 0 ? config.recvTimeout : config.DefaultRecvTimeout;
+            mRawSocket.NoDelay = 0 != config_socket.no_delay ? true : false;
+            mRawSocket.ReceiveBufferSize = config_socket.recv_buff_size;
+            mRawSocket.SendBufferSize = config_socket.send_buff_size;
+            mRawSocket.ReceiveTimeout = config_socket.recv_timeout;
+            mRawSocket.SendTimeout = config_socket.send_timeout;
+            mRawSocket.LingerState = new LingerOption(config_socket.linger_time > 0 ? true : false, config_socket.linger_time);
 
-            if (config.socketLingerFlag)
-            {
-                var lingerDelayTime = config.socketLingerDelayTime > 0 ? config.socketLingerDelayTime : config.DefaultSocketLingerDelayTime;
-                mRawSocket.LingerState = new LingerOption(true, lingerDelayTime);
-            }
-
+            // keep-alive option operates if tcp-socket
             mRawSocket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
+            mRawSocket.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveTime, config_socket.heartbeat_start_time);
+            mRawSocket.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveInterval, config_socket.heartbeat_check_time);
+            mRawSocket.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveRetryCount, config_socket.heartbeat_count);
         }
     }
 }

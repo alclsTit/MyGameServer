@@ -18,7 +18,6 @@
   <ItemGroup>
     <Folder Include="Log\" />
     <Folder Include="Network\Message\" />
-    <Folder Include="Network\ServerSession\" />
     <Folder Include="Network\Server\" />
   </ItemGroup>
 

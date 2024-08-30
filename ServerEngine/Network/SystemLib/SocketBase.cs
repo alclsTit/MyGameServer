@@ -8,43 +8,92 @@ using System.Threading;
 
 using ServerEngine.Log;
 using ServerEngine.Common;
+using ServerEngine.Config;
 
 namespace ServerEngine.Network.SystemLib
 {
     public abstract class SocketBase
     {
-        protected Socket mRawSocket;
-
-        protected int mSocketState = ServerState.NotInitialized;
-
-        public Logger logger { get; protected set; }
-
-        public int GetSocketState => mSocketState;
-
-        public bool IsSocketNull => mRawSocket == null;
-
-        public bool IsClosed => mSocketState == SocketState.Closed;
-
-        public bool IsInClosingOrClosed => mSocketState >= SocketState.Closing;
-
-        public Socket GetSocket()
+        // [0 0 0 0] [0 0 0 0] ([close][send/recv])
+        [Flags]
+        public enum eSocketState : int
         {
-            return mRawSocket;
+            None = 0,
+            Sending = 1,
+            SendComplete = 2,
+            Recving = 4,
+            RecvComplete = 8,
+            Closing = 16,
+            CloseComplete = 32
         }
 
-        public bool CheckCanClose()
+        private object mLockObject = new object();
+        protected Socket? mRawSocket;
+        public ILogger Logger { get; protected set; }
+        public volatile int mState = (int)eSocketState.None;
+
+        // protected int mSocketState = ServerState.NotInitialized;
+
+        //public int GetSocketState => mSocketState;
+
+        //public bool IsSocketNull => mRawSocket == null;
+
+        #region property
+        public Socket? GetSocket => mRawSocket;
+        public int GetState => mState;
+
+        #endregion
+
+
+        //public bool IsInClosingOrClosed => mSocketState >= SocketState.Closing;
+
+        protected SocketBase(Socket socket, ILogger logger)
         {
-            var curState = mSocketState;
-
-            if (curState == SocketState.Closing)
-                return false;
-
-            if (curState == SocketState.Closed)
-                return false;
-
-            return true;
+            mRawSocket = socket;
+            this.Logger = logger;   
         }
 
+        public abstract void SetSocketOption(IConfigNetwork config_network);
+
+        #region method
+        public bool IsNullSocket()
+        {
+            var origin = Interlocked.CompareExchange(ref mRawSocket, null, null);
+            return null == origin ? true : false;
+        }
+
+        public bool IsClosed()
+        {
+            var state = mState;
+
+            var check_close = state & (int)eSocketState.Closing;
+            if ((int)eSocketState.Closing == check_close)
+                return true;
+
+            var check_close_complete = state & (int)eSocketState.CloseComplete;
+            if ((int)eSocketState.CloseComplete == check_close_complete)
+                return true;
+
+            return false;
+        }
+
+        // 삭제예정
+        /*public bool CheckCanClose()
+         {
+             var curState = mSocketState;
+
+             if (curState == SocketState.Closing)
+                 return false;
+
+             if (curState == SocketState.Closed)
+                 return false;
+
+             return true;
+         }
+         */
+
+        // 삭제 예정
+        /*
         public bool ChangeState(int oldState, int newState)
         {
             if (Interlocked.Exchange(ref mSocketState, newState) == oldState)
@@ -52,11 +101,112 @@ namespace ServerEngine.Network.SystemLib
 
             return false;
         }
+        */
+        public bool UpdateState(eSocketState state)
+        {
+            var old_state = mState;
+            var new_state = old_state | (int)state;
+
+            return old_state == Interlocked.Exchange(ref mState, new_state) ? true : false;
+        }
+
+        public bool RemoveState(eSocketState state)
+        {
+            var old_state = mState;
+            var new_state = old_state & ~(int)state;
+
+            return old_state == Interlocked.Exchange(ref mState, new_state) ? true : false;
+        }
+
+        public bool CheckState(eSocketState state)
+        {
+            var old_state = mState;
+            var check_state = (int)state;
+
+            return check_state == (old_state & check_state);
+        }
+
+        public bool CheckNotSendRecv()
+        {
+            var check_recv = CheckState(eSocketState.Recving);
+            var check_send = CheckState(eSocketState.Sending);
+            
+            return check_recv && check_send;
+        }
+
+        public virtual void DisconnectSocket()
+        {
+            if (true == IsNullSocket() || true == IsClosed())
+                return;
+
+            eSocketState new_state = eSocketState.Closing;
+            if (false == UpdateState(new_state))
+            {
+                Logger.Error($"Error in SocketBase.DisconnectSocket() - Fail to update state [{new_state}]");
+                return;
+            }
+            else
+            {
+                try
+                {
+                    lock (mLockObject)
+                    {
+                        if (null == mRawSocket)
+                            return;
+
+                        if (mRawSocket.Connected)
+                            mRawSocket.Shutdown(SocketShutdown.Both);
+
+                        mRawSocket.Close();
+                        mRawSocket = null;
+
+                        UpdateState(eSocketState.CloseComplete);
+                    }
+                }
+                catch (Exception)
+                {
+                    throw;
+                }
+            }
+        }
+
+        public void InternalClose(ServerSession.Session session, eCloseReason reason, Action<ServerSession.Session, eCloseReason> close_event)
+        {
+            try
+            {
+                if (null == close_event)
+                    throw new ArgumentNullException(nameof(close_event));
+
+                if (false == CheckNotSendRecv())
+                    return;
+
+                close_event?.Invoke(session, reason);
+
+                DisconnectSocket();
+            }
+            catch (Exception)
+            {
+                throw;
+            }
+        }
+
+        public virtual void Dispose()
+        {
+            mRawSocket?.Dispose();
+
+            Interlocked.Exchange(ref mState, (int)eSocketState.None);
+        }
+
+
+        #endregion
+
+
+
 
         #region "Socket State Change"
         // Socket 상태의 경우 send/recv가 동시에 일어날 수 있기 때문에 state에 상태가 중복저장될 수 있다. 따라서 비트연산진행        
         // 해당 메서드는 상태가 중복해서 저장될 수 있는 경우 호출 (ex: recv)
-        public bool AddState(int state, bool checkClose)
+        /*public bool AddState(int state, bool checkClose)
         {
             while(true)
             {
@@ -74,9 +224,10 @@ namespace ServerEngine.Network.SystemLib
                     return true;
             }
         }
-             
+        */
+
         // 해당 메서드는 상태가 중복해서 저장되지 않는 경우 호출 (ex: send, close)
-        public bool TryAddState(int state)
+        /*public bool TryAddState(int state)
         {
             while(true)
             {
@@ -91,9 +242,10 @@ namespace ServerEngine.Network.SystemLib
                     return true;
             }
         }
+        */
 
         // 해당 메서드는 기존 상태를 제거하고 다른 상태로 변경할 때 호출 (ex: close) 
-        public bool TryRemoveAddState(int remove, int add)
+        /*public bool TryRemoveAddState(int remove, int add)
         {
             while(true)
             {
@@ -117,8 +269,9 @@ namespace ServerEngine.Network.SystemLib
                 }
             }
         }
+        */
 
-        public bool RemoveState(int state)
+        /*public bool RemoveState(int state)
         {
             while(true)
             {
@@ -128,21 +281,22 @@ namespace ServerEngine.Network.SystemLib
                 if (oldState == Interlocked.CompareExchange(ref mSocketState, newState, oldState))
                     return true;
             }
-        }
+        }*/
 
-        public bool CheckState(int state)
+        /*public bool CheckState(int state)
         {
             return (mSocketState & state) == state;
         }
+        */
 
-        public bool CheckNotInReceivingAndSending()
+        /*public bool CheckNotInReceivingAndSending()
         {
             var state = SocketState.Receiving | SocketState.Sending;
             return mSocketState != state;
-        }
+        }*/
 
         #endregion
-        public void InternalClose(ServerSession.Session session, eCloseReason reason, Action<ServerSession.Session, eCloseReason> closeEvent)
+        /*public void InternalClose(ServerSession.Session session, eCloseReason reason, Action<ServerSession.Session, eCloseReason> closeEvent)
         {
             try
             {
@@ -162,9 +316,10 @@ namespace ServerEngine.Network.SystemLib
                 return;
             }
         }
+        */
 
         // Thread Safe 하게해야되나?
-        public virtual void DisconnectSocket()
+        /* public virtual void DisconnectSocket()
         {
             if (IsClosed || IsSocketNull)
                 return;
@@ -189,5 +344,6 @@ namespace ServerEngine.Network.SystemLib
                 }
             }
         }
+        */
     }
 }

@@ -25,7 +25,7 @@ namespace ServerEngine.Network.ServerSession
         /// <summary>
         /// 소켓 IO 작업에 사용되는 소켓 클래스
         /// </summary>
-        public TCPSocket mSocketWrapper { get; private set; }
+        public TcpSocket mSocketWrapper { get; private set; }
 
         /// <summary>
         /// Send용 SocketAsyncEventArgs  
@@ -95,7 +95,7 @@ namespace ServerEngine.Network.ServerSession
 
         public abstract void OnSend(int numOfBytes);
         
-        public virtual void Initialize(string sessionID, Socket clientSocket, ServerConfig config, Logger logger, List<IListenInfo> listenInfoList, bool isClient)
+        public virtual void Initialize(string sessionID, Socket clientSocket, ServerConfig config, ILogger logger, List<IListenInfo> listenInfoList, bool isClient)
         {
             mSessionID = sessionID;
             mIsClient = isClient;
@@ -105,7 +105,7 @@ namespace ServerEngine.Network.ServerSession
             mServerInfo = config;
 
             // 통신용 소켓 세팅
-            mSocketWrapper = new TCPSocket();
+            mSocketWrapper = new TcpSocket();
             mSocketWrapper.Initialize(clientSocket, config, logger);
             
             // 소켓 통신이 되는 클라이언트, 서버의 IP, PORT 정보
