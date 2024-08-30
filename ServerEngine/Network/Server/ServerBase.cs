@@ -31,9 +31,14 @@ namespace ServerEngine.Network.Server
         public ILogger Logger { get; private set; }
 
         /// <summary>
+        /// server configuration
+        /// </summary>
+        public IConfigCommon? Config { get; private set; }
+
+        /// <summary>
         /// 서버 Listen 관련 옵션관리 컨테이너 (여러개일수있다)
         /// </summary>
-        public List<IListenInfo> mListenInfoList { get; private set; } = new List<IListenInfo>();
+        public List<IConfigListen> mListenInfoList { get; private set; } = new List<IConfigListen>();
 
         /// <summary>
         /// 문자 인코딩 방식(utf-8, utf-16...)
@@ -48,7 +53,7 @@ namespace ServerEngine.Network.Server
         /// <summary>
         /// 서버 이름(RelayServer, AuthServer...)
         /// </summary>
-        public string? name { get; private set; }
+        public string? Name { get; private set; }
 
         /// <summary>
         /// 서버 응용프로그램 위에서 작동되는 여러 서버모듈(클라이언트와 실제 통신 진행)
@@ -60,10 +65,13 @@ namespace ServerEngine.Network.Server
             this.Logger = logger;
         }
 
-        public virtual bool Initialize(string name)
+        public virtual bool Initialize(string name, IConfigCommon config)
         {
             if (string.IsNullOrEmpty(name))
                 throw new ArgumentNullException(nameof(name));
+
+            if (null == config)
+                throw new ArgumentNullException(nameof(config));
 
             //.NetCore는 .NetFramework와는 다르게 assemblyinfo 파일을 자동으로 구성.전체 구성은 csproj에서... 별도로 log4net 수동으로 로드진행 
             //var logRepository = log4net.LogManager.GetRepository(System.Reflection.Assembly.GetEntryAssembly());
@@ -75,7 +83,8 @@ namespace ServerEngine.Network.Server
             //if (logger == null)
             //    return false;
 
-            this.name = name;
+            this.Name = name;
+            this.Config = config;
 
             Message.PacketProcessorManager.Instance.Initialize(logger: Logger);
             
@@ -104,7 +113,7 @@ namespace ServerEngine.Network.Server
         /// <param name="config"></param>
         /// <param name="creater"></param>
         /// <returns></returns>
-        public virtual bool Setup<TServerModule, TServerInfo, TNetworkSystem>(List<IListenInfo> listenInfo, TServerInfo config, Func<ServerSession.Session> creater)
+        public virtual bool Setup<TServerModule, TServerInfo, TNetworkSystem>(List<IConfigListen> listen_list, TServerInfo config, Func<ServerSession.Session> creater)
             where TServerModule : ServerModuleBase, new()
             where TServerInfo : ServerConfig, new()
             where TNetworkSystem : NetworkSystemBase, new()
@@ -117,7 +126,7 @@ namespace ServerEngine.Network.Server
             }
 
             // 2. Listener 세팅
-            if (!SetupListener(listenInfo))
+            if (!SetupListener(listen_list))
             {
                 Logger.Error("Error in ServerBase.Setup() overload_1 - Fail to setup [SetupListener]!!!");
                 return false;
@@ -158,7 +167,7 @@ namespace ServerEngine.Network.Server
         /// <param name="backlog"></param>
         /// <param name="nodelay"></param>
         /// <returns></returns>
-        public virtual bool Setup<TServerModule, TServerInfo, TNetworkSystem>(string ip, ushort port, string serverName, TServerInfo config, Func<ServerSession.Session> creater, int backlog = ServerDefaultOption.backlog, bool nodelay = true)
+        public virtual bool Setup<TServerModule, TServerInfo, TNetworkSystem>(string ip, ushort port, string serverName, TServerInfo config, Func<ServerSession.Session> creater, byte backlog)
             where TServerModule : ServerModuleBase, new()
             where TServerInfo : ServerConfig, new()
             where TNetworkSystem : NetworkSystemBase, new()
@@ -171,7 +180,7 @@ namespace ServerEngine.Network.Server
             }
 
             // 2. Listener 세팅
-            if (!SetupListener(ip, port, serverName, backlog, nodelay))
+            if (!SetupListener(ip, port, serverName, backlog))
             {
                 Logger.Error("Error in ServerBase.Setup() overload_2 - Fail to setup [SetupListener]!!!");
                 return false;
@@ -262,14 +271,14 @@ namespace ServerEngine.Network.Server
         }
 
         /// <summary>
-        /// 현재 listenInfo 중 에 새롭게 추가하려는 listen 정보가 이미 존재하는 경우 체크 
+        /// 현재 IConfigListen 중 에 새롭게 추가하려는 listen 정보가 이미 존재하는 경우 체크 
         /// </summary>
-        /// <param name="listenInfo"></param>
+        /// <param name="IConfigListen"></param>
         /// <returns></returns>
-        private bool CheckAlreadyHaveListener(IListenInfo listenInfo)
+        private bool CheckAlreadyHaveListener(IConfigListen listen_config)
         {
-            return mListenInfoList.Exists(oldListener => oldListener.ip.Equals(listenInfo.ip, StringComparison.OrdinalIgnoreCase) && 
-                                                         oldListener.port == listenInfo.port);
+            return mListenInfoList.Exists(listener => listener.address.Equals(listen_config.address, StringComparison.OrdinalIgnoreCase) &&
+                                                      listener.port == listen_config.port);
         }
 
         /// <summary>
@@ -278,28 +287,27 @@ namespace ServerEngine.Network.Server
         /// <param name="listenInfoList"></param>
         /// <returns></returns>
         /// <exception cref="ArgumentNullException"></exception>
-        private bool SetupListener(List<IListenInfo> listen_list)
+        private bool SetupListener(List<IConfigListen> listen_list)
         {
             if (null == listen_list || 0 >= listen_list.Count)
                 throw new ArgumentNullException(nameof(listen_list));
 
             foreach (var listener in listen_list)
             {
-                if (string.IsNullOrEmpty(listener.ip))
+                if (string.IsNullOrEmpty(listener.address))
                 {
-                    Logger?.Error("Error in ServerBase.SetupListener")
-                    Logger?.Error(this.ClassName(), this.MethodName(), $"Fail to set IP - [{listenInfo.serverName}] is null!!!");
+                    Logger.Error($"Error in ServerBase.SetupListener() - [{Name}] Listen (IPAddress) is Error!!!");
                     return false;
                 }
 
-                if (listenInfo.port <= 0)
+                if (listener.port <= 0)
                 {
-                    logger.Error(this.ClassName(), this.MethodName(), $"Fail to set PORT - [{listenInfo.serverName}] is zero!!!");
+                    Logger.Error($"Error in ServerBase.SetupListener() - [{Name} Listen (PORT) is Error!!!");
                     return false;
                 }
             }
 
-            mListenInfoList = listenInfoList;
+            mListenInfoList = listen_list;
             return true;
         }
 
@@ -308,32 +316,30 @@ namespace ServerEngine.Network.Server
         /// </summary>
         /// <param name="ip"></param>
         /// <param name="port"></param>
-        /// <param name="serverName"></param>
+        /// <param name="name"></param>
         /// <param name="backlog"></param>
         /// <param name="nodelay"></param>
         /// <returns></returns>
         /// <exception cref="ArgumentNullException"></exception>
         /// <exception cref="ArgumentException"></exception>
-        private bool SetupListener(string ip, ushort port, string serverName, int backlog = ServerDefaultOption.backlog, bool nodelay = true)
+        private bool SetupListener(string address, ushort port, string name, byte backlog)
         {
-            if (string.IsNullOrEmpty(ip))
-                throw new ArgumentNullException("IP is null");
+            if (string.IsNullOrEmpty(address))
+                throw new ArgumentNullException(nameof(address));
 
             if (port <= 0)
-                throw new ArgumentException("PORT is zero");
+                throw new ArgumentException(nameof(port));
 
-            if (string.IsNullOrEmpty(serverName))
-                throw new ArgumentNullException(nameof(serverName));
+            if (string.IsNullOrEmpty(name))
+                throw new ArgumentNullException(nameof(name));
 
-            IListenInfo listenInfo = new ListenConfig(ip, port, serverName, backlog, nodelay);
+            IConfigListen listenInfo = new DefaultConfigListen(address, port, backlog);
 
-            mListenInfoList = mListenInfoList ?? new List<IListenInfo>();
+            mListenInfoList = mListenInfoList ?? new List<IConfigListen>();
             if (mListenInfoList.Count > 0)
             {
                 if (!CheckAlreadyHaveListener(listenInfo))
-                {
                     mListenInfoList.Add(listenInfo);
-                }
             }
             else
             {
@@ -342,7 +348,6 @@ namespace ServerEngine.Network.Server
 
             return true;
         }
-
 
         /// <summary>
         /// 서버모듈에서 사용되는 정보를 세팅한다(*서버모듈과 ServerBase는 1:1관계)
@@ -358,17 +363,23 @@ namespace ServerEngine.Network.Server
             where TServerInfo : ServerConfig, new()
             where TNetworkSystem : NetworkSystemBase, new()
         {
-           
-            mServerModuleList = mServerModuleList ?? new List<IServerModule>();
-
-            for(int idx = 0; idx < mListenInfoList.Count; ++idx)
+            try
             {
-                var newModule = new TServerModule();
-                newModule.Initialize(mListenInfoList, mListenInfoList[idx], config, new TNetworkSystem(), logger, creater);
-                mServerModuleList.Add(newModule);
-            }
+                mServerModuleList = mServerModuleList ?? new List<IServerModule>();
 
-            return mServerModuleList.Count > 0;
+                for(int idx = 0; idx < mListenInfoList.Count; ++idx)
+                {
+                    var newModule = new TServerModule();
+                    newModule.Initialize(mListenInfoList, mListenInfoList[idx], config, new TNetworkSystem(), Logger, creater);
+                    mServerModuleList.Add(newModule);
+                }
+
+                return mServerModuleList.Count > 0;
+            }
+            catch (Exception)
+            {
+                throw;
+            }
         }
 
         /// <summary>
@@ -393,12 +404,12 @@ namespace ServerEngine.Network.Server
             {
                 if (ThreadManager.GetAvailableCount > 0)
                 {
-                    ThreadManager.AddThread(module.name, () => ModuleThreadStart(module), true);
+                    ThreadManager.AddThread(module.Name, () => ModuleThreadStart(module), true);
                 }
                 else
                 {
                     // 필요한 ip, port 대역대의 서버가 모두 세팅이 되지 않는한 모두 시작하지 않는다
-                    logger.Error(this.ClassName(), this.MethodName(), "ThreadManager' number of ThreadCount is max!!!");
+                    Logger.Error("Error in ServerBase.SetupThreads() - ThreadManager' number of ThreadCount is max!!!");
                     return false;
                 }
             }
@@ -416,13 +427,13 @@ namespace ServerEngine.Network.Server
             var oldState = ServerState.Initialized;
             if (!ChangeState(oldState, ServerState.Running))
             {
-                logger.Error(this.ClassName(), this.MethodName(), $"State is [{oldState}]. It can be [Running] when state is [Initialized]");
+                Logger.Error($"Error in ServerBase.ModuleThreadStart() - State is [{oldState}]. It can be [Running] when state is [Initialized]");
                 return;
             }
 
             if (!module.StartOnce())
             {
-                logger.Error(this.ClassName(), this.MethodName(), "Fail to set StartOnce work!!!");
+                Logger.Error("Error in ServerBase.ModuleThreadStart() - Fail to set StartOnce work!!!");
                 return;
             }
 
@@ -435,7 +446,7 @@ namespace ServerEngine.Network.Server
                 module.Stop();
 
                 var ipEndPoint = module.ipEndPoint;
-                logger.Error(this.ClassName(), this.MethodName(), $"Server[{ipEndPoint.Address}:{ipEndPoint.Port}] can't be started!!!");               
+                Logger.Error($"Error in ServerBase.ModuleThreadStart() - Server[{ipEndPoint.Address}:{ipEndPoint.Port}] can't be started!!!");               
             }
         }
 

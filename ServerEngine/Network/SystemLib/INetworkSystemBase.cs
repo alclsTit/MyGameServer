@@ -4,12 +4,14 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Net;
+using ServerEngine.Log;
+using ServerEngine.Config;
 
 namespace ServerEngine.Network.SystemLib
 {
     public interface INetworkSystemBase
     {
-        void Initialize(ServerEngine.Network.Server.ServerModuleBase module, IListenInfo listenInfo, ServerEngine.Config.ServerConfig serverInfo, ServerEngine.Log.Logger logger, Func<ServerSession.Session> creater);
+        void Initialize(ServerEngine.Network.Server.ServerModuleBase module, IConfigListen config_listen, ServerEngine.Config.ServerConfig serverInfo, ILogger logger, Func<ServerSession.Session> creater);
 
         bool StartOnce();
 

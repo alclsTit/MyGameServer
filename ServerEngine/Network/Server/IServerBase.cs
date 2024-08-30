@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-
 using ServerEngine.Log;
+using ServerEngine.Config;
 
 namespace ServerEngine.Network.Server
 {
@@ -20,9 +20,14 @@ namespace ServerEngine.Network.Server
         ILogger? Logger { get; }
 
         /// <summary>
-        /// 서버 이름
+        /// ServerName
         /// </summary>
-        string? name { get; }
+        string? Name { get; }
+
+        /// <summary>
+        /// Server Configuartion
+        /// </summary>
+        IConfigCommon? Config { get; }
     }
 
 }

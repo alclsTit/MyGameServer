@@ -95,7 +95,7 @@ namespace ServerEngine
     /// </summary>
     public static class ServerDefaultOption
     {
-        public const int backlog = 200;
+        public const int backlog = 100;
     }
 
     /// <summary>

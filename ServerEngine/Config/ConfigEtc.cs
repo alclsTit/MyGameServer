@@ -54,14 +54,14 @@ namespace ServerEngine.Config
     }
     public interface IPool
     {
-        public Dictionary<string, IConfigPool> pools { get; }
+        public List<IConfigPool> list { get; }
     }
     public class DefaultPool : IPool
     {
-        public Dictionary<string, IConfigPool> pools { get; }
-        public DefaultPool(Dictionary<string, IConfigPool> pools)
+        public List<IConfigPool> list { get; }
+        public DefaultPool(List<IConfigPool> list)
         {
-            this.pools = pools;
+            this.list = list;
         }
     }
     #endregion

@@ -36,14 +36,6 @@ namespace ServerEngine.Common
 
             mLoopLimit = loop_limit;
             mLoopLimitLength = loop_limit.ToString().Length;
-
-            Config.DefaultConfigNetwork network = new DefaultConfigNetwork("zz",
-                new DefaultConfigListen("zz", 1, 1),
-                new DefaultConfigSocket(1, 1, 1, 1, 1, 1, 1, 1, 1, 1),
-                new DefaultConfigSession(1));
-
-            Config.DefaultConfigEtc etc = new DefaultConfigEtc("zz",
-                new DefaultPool()
         }
 
         public string Get()

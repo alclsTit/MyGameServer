@@ -4,7 +4,7 @@ using System.Linq;
 using System.Reflection.Metadata.Ecma335;
 using System.Text;
 using System.Threading.Tasks;
-
+using ServerEngine.Config;
 using ServerEngine.Log;
 using ServerEngine.Network.SystemLib;
 
@@ -17,9 +17,9 @@ namespace ServerEngine.Network.Server
     {
         public ControlServer(ILogger logger) : base(logger) { }
 
-        public override bool Initialize(string name)
+        public override bool Initialize(string name, IConfigCommon config)
         {
-            if (!base.Initialize(name))
+            if (!base.Initialize(name, config))
                 return false;
 
             mServerState = ServerState.Initialized;
