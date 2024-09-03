@@ -6,7 +6,12 @@ using System.Threading.Tasks;
 
 namespace ServerEngine.Network.ServerSession
 {
-    internal class ClientUserToken
+    public class ClientUserToken : UserToken
     {
+        public ClientUserToken(bool client_connect = true)
+            : base()
+        {
+            IsClientConnect = client_connect;
+        }
     }
 }

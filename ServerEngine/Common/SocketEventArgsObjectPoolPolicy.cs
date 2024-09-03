@@ -13,6 +13,7 @@ namespace ServerEngine.Common
 {
     /// <summary>
     /// MS ObjectPool 정책. 풀링하여 사용하는 대상들 개별로 각 정책을 세워서 추가해줘야한다
+    /// ObjectPool Get 진행시, empty pool 상태면 policy에 따라서 추가 Get 요청시 create 함수가 실행되어 객체를 반환한다
     /// </summary>
     public class SocketEventArgsObjectPoolPolicy : IPooledObjectPolicy<SocketAsyncEventArgs>, IAsyncEventCallbackHandler
     {
@@ -61,5 +62,7 @@ namespace ServerEngine.Common
 
             return true;
         }
+
+        public void Dispose() { }
     }
 }

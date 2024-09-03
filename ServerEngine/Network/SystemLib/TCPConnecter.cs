@@ -20,13 +20,19 @@ namespace ServerEngine.Network.SystemLib
     /// </summary>
     public class TcpConnector : NetworkSystemBase
     {
-        public string Name { get; private set; }
-
-        public TcpSocket? mClientSocket { get; private set; }
-
+        private TcpSocket? mClientSocket;
+        private IPEndPoint? mRemoteEndpoint;
         private readonly object mLockObject = new object();
 
-        public TcpConnector(string name, Log.Logger logger)
+        #region property
+        public string Name { get; private set; }
+        public SocketAsyncEventArgs? ConnectEventArgs { get; private set; }
+        public TcpSocket? GetClientSocket => mClientSocket;
+        public IPEndPoint? GetRemoteEndPoint => mRemoteEndpoint;
+        #endregion
+
+        public TcpConnector(string name, Log.ILogger logger)
+            : base(logger)
         {
             Name = name;
         }
@@ -39,7 +45,7 @@ namespace ServerEngine.Network.SystemLib
         /// <param name="serverInfo"></param>
         /// <param name="logger"></param>
         /// <param name="creater"></param>
-        public override void Initialize(ServerModuleBase module, IListenInfo listenInfo, ServerConfig serverInfo, Logger logger, Func<Session> creater)
+        /*public override void Initialize(ServerModuleBase module, IListenInfo listenInfo, ServerConfig serverInfo, Logger logger, Func<Session> creater)
         {
             try
             {
@@ -60,7 +66,7 @@ namespace ServerEngine.Network.SystemLib
             {
                 logger.Error(this.ClassName(), this.MethodName(), ex);
             }
-        }
+        }*/
 
         public bool Initialize()
         {
@@ -68,12 +74,125 @@ namespace ServerEngine.Network.SystemLib
             {
                 base.Initialize();
 
+                mClientSocket = new TcpSocket(new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp), base.Logger);
 
+                var old_state = (eNetworkSystemState)mState;
+                var new_state = eNetworkSystemState.Initialized;
+                if (false == base.UpdateState(new_state))
+                {
+                    Logger.Error($"Error in TcpConnector.Initialize() - Fail to update state [{old_state}] -> [{new_state}]");
+                    return false;
+                }
+
+                if (Logger.IsEnableDebug)
+                    Logger.Debug($"TcpConnector Initialize Complete");
+
+                return true;
             }
             catch (Exception ex)
             {
-                Logger.Error($"Exception in TcpConnector.Initialize() - {ex.Message} - {ex.StackTrace}");
+                Logger.Error($"Exception in TcpConnector.Initialize() - {ex.Message} - {ex.StackTrace}", ex);
                 return false;
+            }
+        }
+
+        /// <summary>
+        /// request connect to server
+        /// </summary>
+        /// <param name="address">ip_address</param>
+        /// <param name="port">port</param>
+        /// <param name="client_connect">boolean that defines client or server connection</param>
+        /// <exception cref="ArgumentNullException"></exception>
+        public void StartConnect(string address, ushort port, bool client_connect = true)
+        {
+            if (string.IsNullOrEmpty(address))
+                throw new ArgumentNullException(nameof(address));
+
+            if (port < 0)
+                throw new ArgumentNullException (nameof(port));
+
+            if (null == mClientSocket)
+                throw new NullReferenceException(nameof(mClientSocket));
+
+            try
+            {
+                var state = (eNetworkSystemState)mState;
+                if (eNetworkSystemState.None >= state)
+                {
+                    Logger.Error($"Error in TcpConnector.StartConnect() - Can' Start Connect. state = {state}");
+                    return;
+                }
+
+                ConnectEventArgs = new SocketAsyncEventArgs();
+                ConnectEventArgs.Completed += new EventHandler<SocketAsyncEventArgs>(OnConnectCompleteHandler);
+                ConnectEventArgs.RemoteEndPoint = new IPEndPoint(IPAddress.Parse(address), port);
+                ConnectEventArgs.UserToken = true == client_connect ? new ClientUserToken(true) : new ServerUserToken(false);
+
+                var pending = mClientSocket.GetSocket?.ConnectAsync(ConnectEventArgs);
+                if (false == pending)
+                    OnConnectCompleteHandler(null, ConnectEventArgs);
+
+                UpdateState(eNetworkSystemState.Running);
+
+                if (Logger.IsEnableDebug)
+                    Logger.Debug($"TcpConnector Start Complete");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Exception in TcpConnector.StartConnect() - {ex.Message} - {ex.StackTrace}", ex);
+                return;
+            }
+        }
+
+        public void OnConnectCompleteHandler(object? sender, SocketAsyncEventArgs e)
+        {
+            var socket_error = e.SocketError;
+            if (false == AsyncCallbackChecker.CheckCallbackHandler_SocketError(socket_error))
+            {
+                Logger.Error($"Error in TcpConnector.OnConnectCompleteHandler() - SocketError = {socket_error}");
+                return;
+            }
+
+            try
+            {
+                mRemoteEndpoint = (IPEndPoint?)e.RemoteEndPoint;
+
+                if (Logger.IsEnableDebug)
+                    Logger.Debug($"Debug in TcpConnector.OnConnectCompleteHandler() - [{Name}][{mRemoteEndpoint?.Address}:{mRemoteEndpoint?.Port}] Server join Complete");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Exception in TcpConnector.OnConnectCompleteHandler() - {ex.Message} - {ex.StackTrace}", ex);
+            }
+        }
+
+        public override void Stop()
+        {
+            try
+            {
+                var state = (eNetworkSystemState)mState;
+                if (true == base.CheckStop())
+                {
+                    Logger.Error($"Error in TcpConnector.Stop() - Stop process is already working. state = [{state}]");
+                    return;
+                }
+
+                if (false == base.UpdateState(eNetworkSystemState.Stopping))
+                {
+                    Logger.Error($"Error in TcpConnector.Stop() - Fail to update state [{state}] - > [{eNetworkSystemState.Stopping}]");
+                    return;
+                }
+
+                if (true == mClientSocket?.GetSocket?.Connected)
+                    mClientSocket?.DisconnectSocket(SocketShutdown.Send);
+
+                ConnectEventArgs?.Dispose();
+
+                UpdateState(eNetworkSystemState.StopComplete);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Exception in TcpConnector.Stop() - {ex.Message} - {ex.StackTrace}", ex);
             }
         }
       
@@ -112,7 +231,7 @@ namespace ServerEngine.Network.SystemLib
 
             return true;
         }
-        */
+        
         public override bool StartOnce()
         {
             return true;
@@ -135,6 +254,30 @@ namespace ServerEngine.Network.SystemLib
                 logger.Error(this.ClassName(), this.MethodName(), ex);
             }
         }
+
+        public override void Stop()
+        {
+            if (!CheckCanStop())
+            {
+                logger.Error(this.ClassName(), this.MethodName(), $"Fail to stop - TCPConnecter is already [{mSystemState}]");
+                return;
+            }
+            else
+            {
+                if (!ChangeState(mSystemState, NetworkSystemState.Stopping))
+                {
+                    logger.Error($"TCPConnecter state is [{mSystemState}]. Fail to change state [Stopping]");
+                    return;
+                }
+            }
+
+            // Todo: 이후 connect 관련 작업 중단 시 추가될 부분
+            ChangeConnectState(false);
+
+            Interlocked.Exchange(ref mSystemState, NetworkSystemState.StopCompleted);
+        }
+
+        */
 
         private void OnConnectCompleted(object sender, SocketAsyncEventArgs e)
         {
@@ -173,28 +316,6 @@ namespace ServerEngine.Network.SystemLib
                 // 익셉션 발생 시, 해당 연결 Close 처리 진행
                 Stop();
             }
-        }
-
-        public override void Stop()
-        {
-            if (!CheckCanStop())
-            {
-                logger.Error(this.ClassName(), this.MethodName(), $"Fail to stop - TCPConnecter is already [{mSystemState}]");
-                return;
-            }
-            else
-            {
-                if (!ChangeState(mSystemState, NetworkSystemState.Stopping))
-                {
-                    logger.Error($"TCPConnecter state is [{mSystemState}]. Fail to change state [Stopping]");
-                    return;
-                }
-            }
-
-            // Todo: 이후 connect 관련 작업 중단 시 추가될 부분
-            ChangeConnectState(false);
-
-            Interlocked.Exchange(ref mSystemState, NetworkSystemState.StopCompleted);
         }
 
         #region "ConnectBackup"

@@ -12,6 +12,7 @@ namespace ServerEngine.Config
         public string name { get; }
         public string address { get; }
         public ushort port { get; }
+        public ushort max_connection { get; }
         public byte backlog { get; }
     }
 
@@ -20,15 +21,17 @@ namespace ServerEngine.Config
         public string name { get; } = string.Empty;
         public string address { get; } = string.Empty;
         public ushort port { get; }
+        public ushort max_connection { get; }
         public byte backlog { get; }
 
         // 사용자정의 config 옵션멤버 추가
 
-        public DefaultConfigListen(string name, string address, ushort port, byte backlog)
+        public DefaultConfigListen(string name, string address, ushort port, ushort max_connection, byte backlog)
         {
             this.name = name;
             this.address = address;
             this.port = port;
+            this.max_connection = max_connection;
             this.backlog = backlog;
         }
     }
@@ -101,7 +104,7 @@ namespace ServerEngine.Config
         public string name { get; }
         public int max_io_thread_count { get; }
 
-        public IConfigListen config_listen { get; }
+        public List<IConfigListen> config_listen_list { get; }
         public IConfigSocket config_socket { get; }
         public IConfigSession config_session { get; }
     }
@@ -111,18 +114,18 @@ namespace ServerEngine.Config
         public string name { get; }
         public int max_io_thread_count { get; }
 
-        public IConfigListen config_listen { get; }
+        public List<IConfigListen> config_listen_list { get; }
         public IConfigSocket config_socket { get; }
         public IConfigSession config_session { get; }
 
         // 사용자정의 config 옵션멤버 추가
 
-        public DefaultConfigNetwork(string name, int max_io_thread_count, IConfigListen config_listen, IConfigSocket config_socket, 
+        public DefaultConfigNetwork(string name, int max_io_thread_count, List<IConfigListen> config_listen_list, IConfigSocket config_socket, 
                                     IConfigSession config_session)
         {
             this.name = name;
             this.max_io_thread_count = max_io_thread_count;
-            this.config_listen = config_listen;
+            this.config_listen_list = config_listen_list;
             this.config_socket = config_socket;
             this.config_session = config_session;
         }

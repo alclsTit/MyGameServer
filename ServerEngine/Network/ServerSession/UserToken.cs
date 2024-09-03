@@ -89,6 +89,7 @@ namespace ServerEngine.Network.ServerSession
 
         #region property
         public bool Connected { get; protected set; }
+        public bool IsClientConnect { get; protected set; }
         public eTokenType TokenType { get; protected set; }
 
         protected Channel<ArraySegment<byte>> SendQueue { get; private set; }

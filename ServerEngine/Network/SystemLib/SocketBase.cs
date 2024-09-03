@@ -133,7 +133,7 @@ namespace ServerEngine.Network.SystemLib
             return check_recv && check_send;
         }
 
-        public virtual void DisconnectSocket()
+        public virtual void DisconnectSocket(SocketShutdown shutdown_option = SocketShutdown.Both)
         {
             if (true == IsNullSocket() || true == IsClosed())
                 return;
@@ -154,7 +154,7 @@ namespace ServerEngine.Network.SystemLib
                             return;
 
                         if (mRawSocket.Connected)
-                            mRawSocket.Shutdown(SocketShutdown.Both);
+                            mRawSocket.Shutdown(shutdown_option);
 
                         mRawSocket.Close();
                         mRawSocket = null;

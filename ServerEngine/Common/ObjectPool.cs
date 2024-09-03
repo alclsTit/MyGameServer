@@ -1,11 +1,64 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Permissions;
 using System.Text;
 using System.Threading.Tasks;
+using Microsoft.Extensions.ObjectPool;
 
 namespace ServerEngine.Common
 {
+    public class DisposableObjectPool<T> : DefaultObjectPool<T>, IDisposable where T : class, IDisposable
+    {
+        private ConcurrentBag<T> m_pools;
+        private bool m_disposed = false;
+
+        public volatile int m_count = 0;
+        public int m_capacity = 0;
+
+        // thread-safe (volatile read)
+        public int Count => m_count;
+        public int Capacity => m_capacity;
+
+        public DisposableObjectPool(IPooledObjectPolicy<T> policy, int maximumRetained) : base(policy, maximumRetained) 
+        {
+            m_pools = new ConcurrentBag<T>();
+            m_capacity = maximumRetained;
+        }
+
+        public new T Get()
+        {
+            var item = base.Get();
+            m_pools.Add(item);
+
+            Interlocked.Increment(ref m_count);
+
+            return item;
+        }
+
+        public new void Return(T obj)
+        {
+            Interlocked.Decrement(ref m_count);
+
+            base.Return(obj);
+        }
+
+        public virtual void Dispose()
+        {
+            if (m_disposed)
+                return;
+
+            foreach (var item in m_pools)
+                item.Dispose();
+
+            m_pools.Clear();
+
+            m_disposed = true;
+        }
+    }
+
+
     /// <summary>
     /// 패킷 풀링, 메모리풀 등 여러 곳에서 사용할 수 있으므로 싱글턴 적용 x
     /// [조건]

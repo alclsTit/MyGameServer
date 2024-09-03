@@ -52,7 +52,7 @@ namespace ServerEngine.Network.SystemLib
         /// <summary>
         /// 로거 클래스 
         /// </summary>
-        public Log.ILogger Logger { get; private set; }
+        public Log.ILogger Logger { get; protected set; }
 
 
         /// <summary>
@@ -94,6 +94,11 @@ namespace ServerEngine.Network.SystemLib
 
         public bool IsConnected => mConnected == 1 ? true : false;
 
+        protected NetworkSystemBase(Log.ILogger logger)
+        {
+            this.Logger = logger;
+        }
+
         /// <summary>
         /// 클래스 멤버필드관련 초기화 메서드 
         /// * 호출하는 곳에서 파라미터에 대한 익셉션을 던지고 있기 때문에 이곳에서 별도로 처리하지 않는다
@@ -134,17 +139,17 @@ namespace ServerEngine.Network.SystemLib
         }
         */
 
-        public virtual bool CheckStop()
+        public bool CheckStop()
         {
             var old_state = (int)mState;
 
             if (old_state == Interlocked.CompareExchange(ref mState, (int)eNetworkSystemState.Stopping, (int)eNetworkSystemState.Stopping))
-                return false;
+                return true;
 
             if (old_state == Interlocked.CompareExchange(ref mState, (int)eNetworkSystemState.StopComplete, (int)eNetworkSystemState.StopComplete))
-                return false;
+                return true;
 
-            return true;
+            return false;
         }
 
         /*public virtual bool ChangeState(int oldState, int newState)
@@ -168,7 +173,7 @@ namespace ServerEngine.Network.SystemLib
             return old_state == Interlocked.CompareExchange(ref mState, check_state, check_state) ? true : false; 
         }
 
-        public virtual bool UpdateState(eNetworkSystemState state)
+        public bool UpdateState(eNetworkSystemState state)
         {
             var old_state = (int)state;
             if (old_state == mState)
