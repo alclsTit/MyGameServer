@@ -6,23 +6,43 @@ using System.Threading.Tasks;
 using System.Threading;
 using System.Net;
 using System.Net.Sockets;
-using Microsoft.Extensions.ObjectPool;
 
 using ServerEngine.Common;
 using ServerEngine.Log;
 using ServerEngine.Network.SystemLib;
 using ServerEngine.Network.ServerSession;
 using ServerEngine.Config;
+using System.Collections.Frozen;
 
 namespace ServerEngine.Network.Server
 {
-    public abstract class ServerModuleBase : IServerModule
+    public abstract class ServerModuleBase : IServerModule, IAsyncEventCallbackHandler
     {
-        public int mState = ServerState.NotInitialized;
+        public enum eServerState : int
+        {
+            None = 0,
+            Initialized = 1,
+            SetupFinished = 2,
+            NotStarted = 3,
+            Running = 4,
+            Stopped = 5,
+            Max = 6
+        }
 
+        /// <summary>
+        /// server_module name
+        /// </summary>
         public string Name { get; private set; }
 
-        public Log.ILogger Logger { get; set; }
+        /// <summary>
+        /// server_module state
+        /// </summary>
+        private volatile int mState = (int)eServerState.None;
+
+        /// <summary>
+        /// server_module logger
+        /// </summary>
+        public Log.ILogger Logger { get; }
 
         #region "2022.05.04 기존 커스텀 ObjectPool -> Microsoft.Extensions.ObjectPool로 변경에 따른 코드 주석처리"
         /*
@@ -32,11 +52,16 @@ namespace ServerEngine.Network.Server
         #endregion
 
         #region "Microsoft.Extensions.ObjectPool"
-        private DefaultObjectPoolProvider mPoolProvider = new DefaultObjectPoolProvider();
-        private SocketEventArgsObjectPoolPolicy mPoolPolicy = new SocketEventArgsObjectPoolPolicy();
-        public Microsoft.Extensions.ObjectPool.ObjectPool<SocketAsyncEventArgs> mRecvEventPoolFix { get; private set; }
-        public Microsoft.Extensions.ObjectPool.ObjectPool<SocketAsyncEventArgs> mSendEventPoolFix { get; private set; }
+        private Microsoft.Extensions.ObjectPool.DefaultObjectPoolProvider mSocketEventArgsPoolProvider;
+        private SocketEventArgsObjectPoolPolicy SocketEventArgsPoolPolicy;
+        public Microsoft.Extensions.ObjectPool.ObjectPool<SocketAsyncEventArgs> mSendEventArgsPool { get; private set; }
+        public Microsoft.Extensions.ObjectPool.ObjectPool<SocketAsyncEventArgs> mRecvEventArgsPool { get; private set; }
         #endregion
+
+        /// <summary>
+        /// server_module config
+        /// </summary>
+        protected IConfigCommon Config { get; private set; }
 
         /// <summary>
         /// 서버 세션 매니저
@@ -63,25 +88,53 @@ namespace ServerEngine.Network.Server
         public IPEndPoint ipEndPoint { get; private set; }
 
         /// <summary>
-        /// 각각의 서버모듈이 작동하기 시작한 시작시간
+        /// 각각의 서버모듈이 작동하기 시작한 시작시간 (utc+0)
         /// </summary>
         public DateTime mStartTime { get; protected set; }
 
         /// <summary>
-        /// 이전 서버모듈이 작동을 시작한 시간
+        /// 이전 서버모듈이 작동을 시작한 시간 (utc+0)
         /// </summary>
         public DateTime mLastActiveTime { get; protected set; }
 
         public int GetServerState => mState;
 
-        protected ServerModuleBase(string name)
+        protected ServerModuleBase(string name, Log.ILogger logger, IConfigCommon config, IAsyncEventCallbackHandler.AsyncEventCallbackHandler handler)
         {
             this.Name = name;
-            mStartTime = DateTime.Now;
+            this.Logger = logger;
+
+            mStartTime = DateTime.UtcNow;
             mLastActiveTime = mStartTime;
+
+            // Microsoft.Extensions.ObjectPool 사용
+            // ObjectPool에서 관리하는 최대 풀 객체 수 세팅
+            mSocketEventArgsPoolProvider = new Microsoft.Extensions.ObjectPool.DefaultObjectPoolProvider();
+            var pool_default_size = config.config_etc.pools.list.FirstOrDefault(e => e.name.ToLower().Trim() == name.ToLower().Trim())?.default_size;
+            if (true == pool_default_size.HasValue)
+                mSocketEventArgsPoolProvider.MaximumRetained = pool_default_size.Value;
+            else
+                mSocketEventArgsPoolProvider.MaximumRetained = Environment.ProcessorCount * 2; 
+
+            if (Logger.IsEnableDebug)
+                Logger.Debug($"Debug in ServerModuleBase() - SocketAsyncEventArgs ObjectPool Size = {mSocketEventArgsPoolProvider.MaximumRetained}");
+
+            // ObjectPool 객체에 callback handler만 선제적으로 등록
+            mSendEventArgsPool = mSocketEventArgsPoolProvider.Create(new SocketEventArgsObjectPoolPolicy(handler));
+            mRecvEventArgsPool = mSocketEventArgsPoolProvider.Create(new SocketEventArgsObjectPoolPolicy(handler));
         }
 
-        public bool ChangeState(int oldState, int newState)
+        public bool UpdateState(eServerState state)
+        {
+            var old_state = mState;
+            if (old_state == (int)state)
+                return true;
+
+            return old_state == Interlocked.Exchange(ref mState, (int)state) ? true : false;
+        }
+
+        // 삭제예정
+        /*public bool ChangeState(int oldState, int newState)
         {
             var curState = mState;
             if (curState == newState)
@@ -91,12 +144,23 @@ namespace ServerEngine.Network.Server
                 return true;
 
             return false;
+        }*/
+
+        public virtual void Initialize()
+        {
+
+            var old_state = mState;
+            if (false == UpdateState(eServerState.Initialized))
+            {
+                Logger.Error($"Error in ServerModuleBase.Initialize() - Fail to Update State [{(eServerState)old_state}] -> [{(eServerState)mState}]");
+                return;
+            }
         }
 
-        public virtual void Initialize(List<IConfigListen> listenInfoList, IConfigListen config_listen, ServerConfig serverInfo, INetworkSystemBase networkSystem, Log.ILogger logger, Func<Session> creater)
+        public virtual void Initialize(List<IConfigListen> listen_config_list, IConfigListen config_listen, ServerConfig serverInfo, INetworkSystemBase networkSystem, Log.ILogger logger, Func<Session> creater)
         {
-            if (listenInfoList == null)
-                throw new ArgumentNullException(nameof(listenInfoList));
+            if (null == listen_config_list)
+                throw new ArgumentNullException(nameof(listen_config_list));
 
             if (config_listen == null)
                 throw new ArgumentNullException(nameof(config_listen));
@@ -118,7 +182,6 @@ namespace ServerEngine.Network.Server
             ipEndPoint = ServerHostFinder.GetServerIPAddress(config_listen.port);
 
             mServerInfo = serverInfo;
-            this.Logger = logger;
             
             mNetworkSystem = networkSystem;
 
@@ -129,23 +192,15 @@ namespace ServerEngine.Network.Server
             */
             #endregion
 
-            // Microsoft.Extensions.ObjectPool 사용
-            // ObjectPool에서 관리하는 최대 Chunk 수 세팅
-            mPoolProvider.MaximumRetained = mServerInfo.maxConnectNumber;
-
-            // ObjectPool 객체생성 정책에 맞춰서 Recv/Send SocketAsyncEventArgs Pool 생성
-            mRecvEventPoolFix = mPoolProvider.Create(mPoolPolicy);
-            mSendEventPoolFix = mPoolProvider.Create(mPoolPolicy);
-
-            var oldState = ServerState.NotInitialized;
-            if (!ChangeState(oldState, ServerState.Initialized))
+            var old_state = mState;
+            if (false == UpdateState(eServerState.Initialized))
             {
-                logger.Error($"Error in ServerModuleBase.Initialize() - State is [{oldState}]. It can be [Initialized] when state is [NotInitialized]");
+                logger.Error($"Error in ServerModuleBase.Initialize() - Fail to Update State [{(eServerState)old_state}] -> [{(eServerState)mState}]");
                 return;
             }
 
             // 마지막에 초기화 진행
-            mNetworkSystem.Initialize(this, config_listen, serverInfo, logger, creater);
+            mNetworkSystem.Initialize(this, config_listen, serverInfo, this.Logger, creater);
             mNetworkSystem.StopCallback += OnNetworkSystemStopped;
         }
 
@@ -226,8 +281,8 @@ namespace ServerEngine.Network.Server
             session.SetSendEventByPool(mSendEventPool.Pop());
             */
             #endregion
-            session.SetRecvEventByPool(mRecvEventPoolFix.Get());
-            session.SetSendEventByPool(mSendEventPoolFix.Get());
+            session.SetSendEventByPool(mSendEventArgsPool.Get());
+            session.SetRecvEventByPool(mRecvEventArgsPool.Get());
 
             return session;
         }
@@ -250,8 +305,8 @@ namespace ServerEngine.Network.Server
             mSendEventPool.Push(session.mSendEvent);
             */
             #endregion
-            mRecvEventPoolFix.Return(session.mRecvEvent);
-            mSendEventPoolFix.Return(session.mSendEvent);
+            mSendEventArgsPool.Return(session.mSendEvent);
+            mRecvEventArgsPool.Return(session.mRecvEvent);
 
             mSessionManager.Close(session.mSessionID);
         }

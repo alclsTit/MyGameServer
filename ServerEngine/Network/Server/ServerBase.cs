@@ -11,6 +11,7 @@ using ServerEngine.Config;
 using ServerEngine.Network.SystemLib;
 using ServerEngine.Common;
 using ServerEngine.Network.ServerSession;
+using Microsoft.Extensions.ObjectPool;
 
 namespace ServerEngine.Network.Server
 {
@@ -60,7 +61,7 @@ namespace ServerEngine.Network.Server
         /// </summary>
         protected List<IServerModule>? mServerModuleList;
 
-        protected ServerBase(ILogger logger)
+        protected ServerBase(Log.Logger logger)
         {
             this.Logger = logger;
         }

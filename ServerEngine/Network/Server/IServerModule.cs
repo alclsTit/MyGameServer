@@ -18,13 +18,13 @@ namespace ServerEngine.Network.Server
     {
         string Name { get; }
 
-        public Log.ILogger Logger { get; set; }
+        public Log.ILogger Logger { get; }
 
         IPEndPoint ipEndPoint { get; }
 
-        void Initialize(List<IListenInfo> listenInfoList, IListenInfo listenInfo, Config.ServerConfig serverInfo, INetworkSystemBase networkSystem,  Logger logger, Func<Session> creater);
+        //void Initialize(List<IListenInfo> listenInfoList, IListenInfo listenInfo, Config.ServerConfig serverInfo, INetworkSystemBase networkSystem,  Logger logger, Func<Session> creater);
 
-        void InitializeSessionManager(ISessionManager sessionManager);
+        //void InitializeSessionManager(ISessionManager sessionManager);
 
         bool StartOnce();
 

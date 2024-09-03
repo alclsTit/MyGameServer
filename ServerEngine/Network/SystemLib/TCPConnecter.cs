@@ -18,9 +18,18 @@ namespace ServerEngine.Network.SystemLib
     /// <summary>
     /// TCP Socket을 이용한 Connect 관련 작업 클래스
     /// </summary>
-    public class TCPConnecter : NetworkSystemBase
+    public class TcpConnector : NetworkSystemBase
     {
+        public string Name { get; private set; }
+
+        public TcpSocket? mClientSocket { get; private set; }
+
         private readonly object mLockObject = new object();
+
+        public TcpConnector(string name, Log.Logger logger)
+        {
+            Name = name;
+        }
 
         /// <summary>
         /// TCPConnecter 멤버 데이터 초기화
@@ -53,11 +62,26 @@ namespace ServerEngine.Network.SystemLib
             }
         }
 
+        public bool Initialize()
+        {
+            try
+            {
+                base.Initialize();
+
+
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Exception in TcpConnector.Initialize() - {ex.Message} - {ex.StackTrace}");
+                return false;
+            }
+        }
+      
         /// <summary>
         /// ListenInfo의 IPEndPoint에 대한 Connect 진행 요청 메서드 
         /// </summary>
         /// <returns></returns>
-        public override bool Start()
+        /*public override bool Start()
         {
             var lIPEndPoint = GetIPEndPoint;
             if (lIPEndPoint == null)
@@ -88,7 +112,7 @@ namespace ServerEngine.Network.SystemLib
 
             return true;
         }
-
+        */
         public override bool StartOnce()
         {
             return true;

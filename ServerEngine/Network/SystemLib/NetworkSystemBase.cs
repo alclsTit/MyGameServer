@@ -11,6 +11,7 @@ using ServerEngine.Network.Server;
 using ServerEngine.Log;
 using ServerEngine.Network.ServerSession;
 using ServerEngine.Config;
+using ServerEngine.Common;
 
 namespace ServerEngine.Network.SystemLib
 {
@@ -19,6 +20,15 @@ namespace ServerEngine.Network.SystemLib
     /// </summary>
     public abstract class NetworkSystemBase : INetworkSystemBase
     {
+        public enum eNetworkSystemState
+        {
+            None = 0,
+            Initialized = 1,
+            Running = 2,
+            Stopping = 3,
+            StopComplete = 4
+        }
+
         /// <summary>
         /// Accept 및 Connect callback 함수에서 session 추가시 사용되는 delegate
         /// </summary>
@@ -42,13 +52,13 @@ namespace ServerEngine.Network.SystemLib
         /// <summary>
         /// 로거 클래스 
         /// </summary>
-        public Logger logger { get; private set; }
+        public Log.ILogger Logger { get; private set; }
 
 
         /// <summary>
         /// Accept 및 connect 상태
         /// </summary>
-        protected int mSystemState = NetworkSystemState.NotInitialized;
+        protected volatile int mState = (int)eNetworkSystemState.None;
 
         /// <summary>
         /// IPEndpoint (ip, port 등..) 반환
@@ -88,7 +98,7 @@ namespace ServerEngine.Network.SystemLib
         /// 클래스 멤버필드관련 초기화 메서드 
         /// * 호출하는 곳에서 파라미터에 대한 익셉션을 던지고 있기 때문에 이곳에서 별도로 처리하지 않는다
         /// </summary>
-        public virtual void Initialize(ServerModuleBase module, IListenInfo listenInfo, ServerConfig serverInfo, Logger logger, Func<Session> creater)
+        public virtual void Initialize(ServerModuleBase module, IListenInfo listenInfo, ServerConfig serverInfo, Log.Logger logger, Func<Session> creater)
         {
             if (listenInfo == null)
                 throw new ArgumentNullException(nameof(listenInfo));
@@ -105,12 +115,12 @@ namespace ServerEngine.Network.SystemLib
             mListenInfo = new ListenInfo(listenInfo.ip, listenInfo.port, listenInfo.backlog, listenInfo.serverName, listenInfo.nodelay);
 
             mServerInfo = serverInfo;
-            this.logger = logger;
+            this.Logger = logger;
             mSessionCreater = creater;
             mServerModule = module;
         }
 
-        protected virtual bool CheckCanStop()
+        /*protected virtual bool CheckCanStop()
         {
             var curState = mSystemState;
 
@@ -122,8 +132,22 @@ namespace ServerEngine.Network.SystemLib
 
             return true;
         }
+        */
 
-        public virtual bool ChangeState(int oldState, int newState)
+        public virtual bool CheckStop()
+        {
+            var old_state = (int)mState;
+
+            if (old_state == Interlocked.CompareExchange(ref mState, (int)eNetworkSystemState.Stopping, (int)eNetworkSystemState.Stopping))
+                return false;
+
+            if (old_state == Interlocked.CompareExchange(ref mState, (int)eNetworkSystemState.StopComplete, (int)eNetworkSystemState.StopComplete))
+                return false;
+
+            return true;
+        }
+
+        /*public virtual bool ChangeState(int oldState, int newState)
         {
             var curState = mSystemState;
             if (curState == newState)
@@ -133,6 +157,24 @@ namespace ServerEngine.Network.SystemLib
                 return true;
 
             return false;
+        }
+        */
+
+        public virtual bool CheckState(eNetworkSystemState state)
+        {
+            var old_state = (int)mState;
+            var check_state = (int)state;
+
+            return old_state == Interlocked.CompareExchange(ref mState, check_state, check_state) ? true : false; 
+        }
+
+        public virtual bool UpdateState(eNetworkSystemState state)
+        {
+            var old_state = (int)state;
+            if (old_state == mState)
+                return true;
+
+            return old_state == Interlocked.Exchange(ref mState, (int)state);
         }
 
         protected void OnStopCallback()

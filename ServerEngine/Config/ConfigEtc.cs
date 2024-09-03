@@ -45,15 +45,15 @@ namespace ServerEngine.Config
     public interface IConfigPool
     {
         public string name { get; }
-        public long default_size { get; }
-        public long create_size { get; }
+        public int default_size { get; }
+        public int create_size { get; }
     }
     public class DefaultConfigPool : IConfigPool
     {
         public string name { get; }
-        public long default_size { get; }   
-        public long create_size { get; }
-        public DefaultConfigPool(string name, long default_size, long create_size)
+        public int default_size { get; }   
+        public int create_size { get; }
+        public DefaultConfigPool(string name, int default_size, int create_size)
         {
             this.name = name;
             this.default_size = default_size;

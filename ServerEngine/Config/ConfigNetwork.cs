@@ -9,6 +9,7 @@ namespace ServerEngine.Config
     #region Config - Data
     public interface IConfigListen
     {
+        public string name { get; }
         public string address { get; }
         public ushort port { get; }
         public byte backlog { get; }
@@ -16,14 +17,16 @@ namespace ServerEngine.Config
 
     public class DefaultConfigListen : IConfigListen
     {
+        public string name { get; } = string.Empty;
         public string address { get; } = string.Empty;
         public ushort port { get; }
         public byte backlog { get; }
 
         // 사용자정의 config 옵션멤버 추가
 
-        public DefaultConfigListen(string address, ushort port, byte backlog)
+        public DefaultConfigListen(string name, string address, ushort port, byte backlog)
         {
+            this.name = name;
             this.address = address;
             this.port = port;
             this.backlog = backlog;
@@ -106,7 +109,7 @@ namespace ServerEngine.Config
     public class DefaultConfigNetwork : IConfigNetwork
     {
         public string name { get; }
-        public int io_thread_count { get; }
+        public int max_io_thread_count { get; }
 
         public IConfigListen config_listen { get; }
         public IConfigSocket config_socket { get; }
@@ -114,11 +117,11 @@ namespace ServerEngine.Config
 
         // 사용자정의 config 옵션멤버 추가
 
-        public DefaultConfigNetwork(string name, int io_thread_count, IConfigListen config_listen, IConfigSocket config_socket, 
+        public DefaultConfigNetwork(string name, int max_io_thread_count, IConfigListen config_listen, IConfigSocket config_socket, 
                                     IConfigSession config_session)
         {
             this.name = name;
-            this.io_thread_count = io_thread_count;
+            this.max_io_thread_count = max_io_thread_count;
             this.config_listen = config_listen;
             this.config_socket = config_socket;
             this.config_session = config_session;

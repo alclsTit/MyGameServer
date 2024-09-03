@@ -18,12 +18,17 @@ namespace ServerEngine.Network.SystemLib
     /// <summary>
     /// TCP Socket을 이용한 Listen 및 Accept 관련 작업 클래스
     /// </summary>
-    public class TCPListener : NetworkSystemBase
+    public class TcpAcceptor : NetworkSystemBase
     {
         /// <summary>
-        /// Client와의 Listen에 사용되는 소켓
+        /// dependent on server_name
         /// </summary>
-        public Socket mListenSocket { get; private set; }
+        public string Name { get; private set; }
+       
+        /// <summary>
+        /// listen socket that used on acceptor
+        /// </summary>
+        public TcpSocket? mListenSocket { get; private set; }
 
         /// <summary>
         /// Socket 통신용 비동기 객체 선언 
@@ -37,6 +42,120 @@ namespace ServerEngine.Network.SystemLib
         private readonly object mLockObject = new Object();
 
         /// <summary>
+        /// Listen / Pool Config
+        /// </summary>
+        private IConfigListen m_listen_config;
+        private IConfigEtc m_config_etc;
+
+        /// <summary>
+        /// Microsoft.Extensions.ObjectPool - AcceptEventArgs
+        /// </summary>
+        #region Microsoft.Extensions.ObjectPool
+        private Microsoft.Extensions.ObjectPool.DefaultObjectPoolProvider mSocketEventArgsPoolProvider;
+        private SocketEventArgsObjectPoolPolicy SocketEventArgsPoolPolicy;
+
+        public Microsoft.Extensions.ObjectPool.ObjectPool<SocketAsyncEventArgs> mAcceptEventArgsPool;
+        #endregion
+
+        private Thread mAcceptThread;
+        private AutoResetEvent mThreadBlockEvent = new AutoResetEvent(false);
+        private volatile int mAcceptCount;
+
+        public TcpAcceptor(string name, Log.Logger logger, IConfigListen listen_config, IConfigEtc config_etc) 
+            : base()
+        {
+            Name = name;    
+            m_listen_config = listen_config;
+            m_config_etc = config_etc;
+
+            mAcceptThread = new Thread(() => { StartAccept(); });
+        }
+
+        private Socket CreateListenSocket()
+        {
+            var socket = new Socket(addressFamily: AddressFamily.InterNetwork, socketType: SocketType.Stream, protocolType: ProtocolType.Tcp);
+
+            try
+            {
+                socket.Bind(new IPEndPoint(IPAddress.Parse(m_listen_config.address), m_listen_config.port));
+                socket.Listen(m_listen_config.backlog);
+
+                return socket;
+            }
+            catch (Exception)
+            {
+                throw;
+            }
+        }
+
+        public void OnAcceptCompleteHandler(object? sender, SocketAsyncEventArgs e)
+        {
+            try
+            {
+                mThreadBlockEvent.Set();
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Exception in TcpAcceptor.OnAcceptCompleteHandler() - {ex.Message} - {ex.StackTrace}");
+                mAcceptEventArgsPool.Return(e);
+            }
+        }
+
+        public bool Initialize()
+        {
+            try
+            {
+                base.Initialize();
+                
+                mListenSocket = new TcpSocket(CreateListenSocket(), base.Logger);
+
+                mSocketEventArgsPoolProvider = new Microsoft.Extensions.ObjectPool.DefaultObjectPoolProvider();
+                var pool_default_size = m_config_etc.pools.list.FirstOrDefault(e => e.name.ToLower().Trim() == Name.ToLower().Trim())?.default_size;
+                if (true == pool_default_size.HasValue)
+                    mSocketEventArgsPoolProvider.MaximumRetained = pool_default_size.Value;
+                else
+                    mSocketEventArgsPoolProvider.MaximumRetained = Environment.ProcessorCount * 2;
+
+                mAcceptEventArgsPool = mSocketEventArgsPoolProvider.Create(new SocketEventArgsObjectPoolPolicy(OnAcceptCompleteHandler));
+
+                var old_state = ServerState.NotInitialized;
+                if (false == UpdateState(eNetworkSystemState.Initialized))
+                {
+                    Logger.Error($"Error in TcpAcceptor.Initialize() - Fail to update state [{old_state}] -> [{(eNetworkSystemState)mState}]");
+                    return false;
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Exception in TCPListener.Initialize() - {ex.Message} - {ex.StackTrace}", ex);
+                return false;
+            }
+        }
+
+        public void StartAccept()
+        {
+            if (null == mListenSocket)
+                throw new NullReferenceException(nameof(mListenSocket));
+
+            try
+            {
+                mThreadBlockEvent.WaitOne();
+
+                SocketAsyncEventArgs accept_event_args = mAcceptEventArgsPool.Get();
+
+                var pending = mListenSocket.GetSocket?.AcceptAsync(accept_event_args);
+                if (false == pending)
+                    OnAcceptCompleteHandler(null, accept_event_args);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Exception in TcpAcceptor.StartAccept() - {ex.Message} - {ex.StackTrace}");
+            }       
+        }
+
+        /// <summary>
         /// TCPListener 멤버 데이터 초기화 
         /// * 객체 인스턴스 생성 후 가장 먼저 호출하여 멤버 초기화 진행
         /// </summary>
@@ -44,7 +163,7 @@ namespace ServerEngine.Network.SystemLib
         /// <param name="serverInfo"></param>
         /// <param name="logger"></param>
         /// <param name="creater"></param>
-        public override void Initialize(ServerModuleBase module, IListenInfo listenInfo, ServerConfig serverInfo, Logger logger, Func<Session> creater)
+        /*public override void Initialize(ServerModuleBase module, IListenInfo listenInfo, ServerConfig serverInfo, Logger logger, Func<Session> creater)
         {
             try
             {
@@ -65,13 +184,13 @@ namespace ServerEngine.Network.SystemLib
             {
                 logger.Error(this.ClassName(), this.MethodName(), ex);
             }
-        }
+        }*/
 
         /// <summary>
         /// EndPoint에 binding된 Socket으로 Listen 및 Accept 진행 (Listen -> Accept 순서대로 로직 진행)
         /// </summary>
         /// <returns></returns>
-        public override bool Start()
+        /*public override bool Start()
         {
             var oldState = NetworkSystemState.Initialized;
             if (!ChangeState(oldState, NetworkSystemState.Running))
@@ -84,6 +203,30 @@ namespace ServerEngine.Network.SystemLib
                 logger.Debug("TCPListener [Accept] Started");
 
             StartAccept(mAcceptEvent);
+
+            return true;
+        }
+        */
+
+        public override bool Start()
+        {
+            if (false == CheckState(eNetworkSystemState.Initialized))
+            {
+                Logger.Error($"Error in TcpAcceptor.Start() - TcpAcceptor can't start when state is [{(eNetworkSystemState)mState}]");
+                return false;
+            }
+
+            var new_state = eNetworkSystemState.Running;
+            if (false == UpdateState(new_state))
+            {
+                Logger.Error($"Error in TcpAcceptor.Start() - Fail to update state [{new_state}]");
+                return false;
+            }
+
+            mAcceptThread.Start();
+
+            if (Logger.IsEnableDebug)
+                Logger.Debug($"TcpAccetor Start Complete");
 
             return true;
         }
@@ -112,7 +255,7 @@ namespace ServerEngine.Network.SystemLib
         /// Listen 진행. 한번 Binding된 ip, port는 중복으로 binding 될 수 없다
         /// </summary>
         /// <returns></returns>
-        private bool StartListen()
+        /*private bool StartListen()
         {
             var ipEndPoint = GetIPEndPoint;
             if (ipEndPoint == null)
@@ -136,9 +279,9 @@ namespace ServerEngine.Network.SystemLib
             mAcceptEvent.Completed += new EventHandler<SocketAsyncEventArgs>(OnAcceptCompleted);
 
             return true;
-        }
+        }*/
 
-        private void StartAccept(SocketAsyncEventArgs e)
+        /*private void StartAccept(SocketAsyncEventArgs e)
         {
             try
             {
@@ -151,6 +294,7 @@ namespace ServerEngine.Network.SystemLib
                 logger.Error(this.ClassName(), this.MethodName(), ex);
             }
         }
+        */
 
         // CallBack 핸들러와 이전 작업들은 서로 다른 스레드에서 진행된다. 공유변수가 있다면 동기화가 필요
         private void OnAcceptCompleted(object sender, SocketAsyncEventArgs e)

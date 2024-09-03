@@ -14,7 +14,7 @@ namespace ServerEngine.Network.SystemLib
 {
     public class TcpSocket : SocketBase
     {
-        public TcpSocket(Socket socket, ILogger logger) 
+        public TcpSocket(Socket socket, Log.ILogger logger) 
             : base(socket: socket, logger: logger)
         {
         }

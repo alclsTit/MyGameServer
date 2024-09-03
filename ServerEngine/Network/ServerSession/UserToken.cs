@@ -8,6 +8,7 @@ using System.Reflection.Metadata.Ecma335;
 using System.Text;
 using System.Threading.Channels;
 using System.Threading.Tasks;
+using ServerEngine.Common;
 using ServerEngine.Config;
 using ServerEngine.Log;
 using ServerEngine.Network.Message;
@@ -96,12 +97,12 @@ namespace ServerEngine.Network.ServerSession
         public IPEndPoint LocalEndPoint { get; protected set; }
         public Log.ILogger Logger { get; private set; }
 
-        public SocketAsyncEventArgs RecvAsyncEvent { get; private set; }
         public SocketAsyncEventArgs SendAsyncEvent { get; private set; }
+        public SocketAsyncEventArgs RecvAsyncEvent { get; private set; }
         public MessageProcessor MessageHandler { get; private set; }
         #endregion
 
-        protected UserToken(SocketBase socket, EndPoint remote_endpoint, EndPoint local_endpoint, eTokenType type, Log.ILogger logger, IConfigNetwork config_network)
+        protected UserToken(SocketBase socket, EndPoint remote_endpoint, EndPoint local_endpoint, SocketAsyncEventArgs socket_send_async, SocketAsyncEventArgs socket_recv_async, eTokenType type, Log.ILogger logger, IConfigNetwork config_network)
         {
             this.Socket = socket;
             this.Logger = logger;   
@@ -109,6 +110,9 @@ namespace ServerEngine.Network.ServerSession
             TokenType = type;
             LocalEndPoint = (IPEndPoint)local_endpoint;
             RemoteEndPoint = (IPEndPoint)remote_endpoint;
+
+            SendAsyncEvent = socket_send_async;
+            RecvAsyncEvent = socket_recv_async;
 
             var config_socket = config_network.config_socket;
 
@@ -156,7 +160,48 @@ namespace ServerEngine.Network.ServerSession
             var pending = Socket.GetSocket?.SendAsync(SendAsyncEvent);
             if (false == pending)
             {
+                OnSendCompleteHandler(null, SendAsyncEvent);
+            }
+        }
 
+        public virtual void OnSendCompleteHandler(object? sender, SocketAsyncEventArgs e)
+        {
+            try
+            {
+                var socket_error = e.SocketError;
+                var bytes_transferred = e.BytesTransferred;
+
+                if (false == AsyncCallbackChecker.CheckCallbackHandler(socket_error, bytes_transferred))
+                {
+                    Logger.Error($"Error in UserToken.OnSendCompleteHandler() - SocketError = {socket_error}, BytesTransferred = {bytes_transferred}");
+                    return;
+                }
+
+
+            }
+            catch (Exception ex) 
+            {
+                Logger.Error($"Exception in UserToken.OnSendCompleteHandler() - {ex.Message} - {ex.StackTrace}", ex);
+            }
+        }
+
+        public virtual void OnRecvCompleteHandler(object? sender, SocketAsyncEventArgs e)
+        {
+            try
+            {
+                var socket_error = e.SocketError;
+                var bytes_transferred = e.BytesTransferred;
+
+                if (false == AsyncCallbackChecker.CheckCallbackHandler(socket_error, bytes_transferred))
+                {
+                    Logger.Error($"Error in UserToken.OnRecvCompleteHandler() - SocketError = {socket_error}, BytesTransferred = {bytes_transferred}");
+                    return;
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Exception in UserToken.OnRecvCompleteHandler() - {ex.Message} - {ex.StackTrace}");
+                throw;
             }
         }
 

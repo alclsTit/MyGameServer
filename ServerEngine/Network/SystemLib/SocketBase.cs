@@ -27,10 +27,9 @@ namespace ServerEngine.Network.SystemLib
             CloseComplete = 32
         }
 
-        private object mLockObject = new object();
         protected Socket? mRawSocket;
-        public ILogger Logger { get; protected set; }
-        public volatile int mState = (int)eSocketState.None;
+        private object mLockObject = new object();
+        private volatile int mState = (int)eSocketState.None;
 
         // protected int mSocketState = ServerState.NotInitialized;
 
@@ -39,15 +38,15 @@ namespace ServerEngine.Network.SystemLib
         //public bool IsSocketNull => mRawSocket == null;
 
         #region property
+        public Log.ILogger Logger { get; protected set; }
         public Socket? GetSocket => mRawSocket;
         public int GetState => mState;
-
         #endregion
 
 
         //public bool IsInClosingOrClosed => mSocketState >= SocketState.Closing;
 
-        protected SocketBase(Socket socket, ILogger logger)
+        protected SocketBase(Socket socket, Log.ILogger logger)
         {
             mRawSocket = socket;
             this.Logger = logger;   
@@ -196,12 +195,7 @@ namespace ServerEngine.Network.SystemLib
 
             Interlocked.Exchange(ref mState, (int)eSocketState.None);
         }
-
-
         #endregion
-
-
-
 
         #region "Socket State Change"
         // Socket 상태의 경우 send/recv가 동시에 일어날 수 있기 때문에 state에 상태가 중복저장될 수 있다. 따라서 비트연산진행        
