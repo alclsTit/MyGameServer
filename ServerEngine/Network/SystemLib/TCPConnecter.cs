@@ -157,6 +157,36 @@ namespace ServerEngine.Network.SystemLib
             {
                 mRemoteEndpoint = (IPEndPoint?)e.RemoteEndPoint;
 
+                if (e.UserToken is null)
+                {
+                    Logger.Error($"Error in TcpConnector.OnConnectCompleteHandler() - UserToken is null");
+                    return;
+                }
+
+                /*if (e.UserToken?.GetType() == typeof(ClientUserToken))
+                {
+                    // connection request by client
+                    var token = e.UserToken as ClientUserToken;
+                    if (null == token)
+                    {
+                        Logger.Error($"Error in TcpConnector.OnConnectCompleteHandler() - Fail to UserToken Casting [ClientUserToken]");
+                        return;
+                    }
+
+
+                }
+                else
+                {
+                    // connection request by server
+                    var token = e.UserToken as ServerUserToken;
+                    if (null == token)
+                    {
+                        Logger.Error($"Error in TcpConnector.OnConnectCompleteHandler() - Fail to UserToken Casting [ServerUserToken]");
+                        return;
+                    }
+                }
+                */
+
                 if (Logger.IsEnableDebug)
                     Logger.Debug($"Debug in TcpConnector.OnConnectCompleteHandler() - [{Name}][{mRemoteEndpoint?.Address}:{mRemoteEndpoint?.Port}] Server join Complete");
             }

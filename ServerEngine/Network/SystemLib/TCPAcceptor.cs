@@ -8,13 +8,8 @@ using System.Net.Sockets;
 using System.Threading;
 
 using ServerEngine.Common;
-using ServerEngine.Network.Server;
 using ServerEngine.Network.ServerSession;
 using ServerEngine.Config;
-using ServerEngine.Log;
-using System.Xml.Linq;
-using System.Runtime.CompilerServices;
-using System.Net.NetworkInformation;
 
 namespace ServerEngine.Network.SystemLib
 {
@@ -34,31 +29,15 @@ namespace ServerEngine.Network.SystemLib
         private TcpSocket? mListenSocket;
 
         /// <summary>
-        /// Socket 통신용 비동기 객체 선언 
-        /// </summary>
-        private SocketAsyncEventArgs mAcceptEvent;
-
-        /// <summary>
-        /// Thread 동기화에 사용될 Lock 객체(CriticalSection)
-        /// </summary>
-
-        private readonly object mLockObject = new Object();
-
-        /// <summary>
         /// Listen / Pool Config
         /// </summary>
-        private IConfigListen m_config_listen;
-        private IConfigEtc m_config_etc;
+        private IConfigListen? m_config_listen;
+        private IConfigEtc? m_config_etc;
 
         /// <summary>
         /// Microsoft.Extensions.ObjectPool - AcceptEventArgs
         /// </summary>
         #region Microsoft.Extensions.ObjectPool
-        private Microsoft.Extensions.ObjectPool.DefaultObjectPoolProvider? mSocketEventArgsPoolProvider;
-        private SocketEventArgsObjectPoolPolicy? SocketEventArgsPoolPolicy;
-
-        //public Microsoft.Extensions.ObjectPool.ObjectPool<SocketAsyncEventArgs>? mAcceptEventArgsPool;
-
         private DisposableObjectPool<SocketAsyncEventArgs>? mAcceptEventArgsPool;
         #endregion
 
@@ -79,10 +58,12 @@ namespace ServerEngine.Network.SystemLib
 
         private Socket CreateListenSocket()
         {
-            var socket = new Socket(addressFamily: AddressFamily.InterNetwork, socketType: SocketType.Stream, protocolType: ProtocolType.Tcp);
+            if (null == m_config_listen)
+                throw new NullReferenceException(nameof(m_config_listen));
 
             try
             {
+                var socket = new Socket(addressFamily: AddressFamily.InterNetwork, socketType: SocketType.Stream, protocolType: ProtocolType.Tcp);
                 socket.Bind(new IPEndPoint(IPAddress.Parse(m_config_listen.address), m_config_listen.port));
                 socket.Listen(m_config_listen.backlog);
 
@@ -96,6 +77,12 @@ namespace ServerEngine.Network.SystemLib
 
         public bool Initialize(IConfigListen config_listen, IConfigEtc config_etc)
         {
+            if (null == config_listen) 
+                throw new ArgumentNullException(nameof(config_listen));
+
+            if (null == config_etc)
+                throw new ArgumentNullException(nameof(config_etc));
+
             try
             {
                 base.Initialize();
@@ -105,16 +92,8 @@ namespace ServerEngine.Network.SystemLib
 
                 mListenSocket = new TcpSocket(CreateListenSocket(), base.Logger);
 
-                //mSocketEventArgsPoolProvider = new Microsoft.Extensions.ObjectPool.DefaultObjectPoolProvider();
                 var pool_default_size = m_config_etc.pools.list.FirstOrDefault(e => e.name.ToLower().Trim() == Name.ToLower().Trim())?.default_size;
                 int maximum_retained = true == pool_default_size.HasValue ? pool_default_size.Value : m_config_listen.max_connection;
-
-                //if (true == pool_default_size.HasValue)
-                //    mSocketEventArgsPoolProvider.MaximumRetained = pool_default_size.Value;
-                //else
-                //    mSocketEventArgsPoolProvider.MaximumRetained = m_config_listen.max_connection;
-
-                //mAcceptEventArgsPool = mSocketEventArgsPoolProvider.Create(new SocketEventArgsObjectPoolPolicy(OnAcceptCompleteHandler));
 
                 mAcceptEventArgsPool = new DisposableObjectPool<SocketAsyncEventArgs>(
                     new SocketEventArgsObjectPoolPolicy(OnAcceptCompleteHandler), 
@@ -260,10 +239,39 @@ namespace ServerEngine.Network.SystemLib
                     return;
                 }
 
-                Interlocked.Increment(ref mAcceptCount);
+                if (e.UserToken is null)
+                {
+                    Logger.Error($"Error in TcpAcceptor.OnAcceptCompleteHandler() - UserToken is null");
+                    return;
+                }
 
                 // 클라이언트로부터의 connect인지. 서버로부터의 connect인지 판단 
                 // connect 요청온 socketasynceventargs의 usertoken을 가지고 비교>?
+                if (e.UserToken?.GetType() == typeof(ClientUserToken))
+                {
+                    // connection request by client
+                    var token = e.UserToken as ClientUserToken;
+                    if (null == token)
+                    {
+                        Logger.Error($"Error in TcpAcceptor.OnAcceptCompleteHandler() - Fail to UserToken Casting [ClientUserToken]");
+                        return;
+                    }
+
+                    
+
+                }
+                else
+                {
+                    // connection request by server 
+                    var token = e.UserToken as ServerUserToken;
+                    if (null == token)
+                    {
+                        Logger.Error($"Error in TcpAcceptor.OnAcceptCompleteHandler() - Fail to UserToken Casting [ServerUserToken]");
+                        return;
+                    }
+                }
+
+                Interlocked.Increment(ref mAcceptCount);
 
                 mThreadBlockEvent.Set();
 
@@ -285,8 +293,11 @@ namespace ServerEngine.Network.SystemLib
 
         private bool CheckMaxConnection()
         {
+            if (null == m_config_listen)
+                return false;
+
             var current_connected_count = mAcceptCount;
-            return current_connected_count <= m_config_listen.max_connection ? false : true;
+            return current_connected_count <= m_config_listen.max_connection? false : true;
         }
 
         /// <summary>

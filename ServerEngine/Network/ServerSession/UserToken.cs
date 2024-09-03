@@ -87,6 +87,9 @@ namespace ServerEngine.Network.ServerSession
             Server
         }
 
+        private IPEndPoint? mLocalEndPoint;
+        private IPEndPoint? mRemoteEndPoint;
+
         #region property
         public bool Connected { get; protected set; }
         public bool IsClientConnect { get; protected set; }
@@ -94,26 +97,28 @@ namespace ServerEngine.Network.ServerSession
 
         protected Channel<ArraySegment<byte>> SendQueue { get; private set; }
         public SocketBase Socket { get; protected set; }
-        public IPEndPoint RemoteEndPoint { get; protected set; }
-        public IPEndPoint LocalEndPoint { get; protected set; }
         public Log.ILogger Logger { get; private set; }
 
         public SocketAsyncEventArgs SendAsyncEvent { get; private set; }
         public SocketAsyncEventArgs RecvAsyncEvent { get; private set; }
         public MessageProcessor MessageHandler { get; private set; }
+
+        public IPEndPoint? GetLocalEndPoint => mLocalEndPoint;
+        public IPEndPoint? GetRemoteEndPoint => mRemoteEndPoint;
         #endregion
 
-        protected UserToken(SocketBase socket, EndPoint remote_endpoint, EndPoint local_endpoint, SocketAsyncEventArgs socket_send_async, SocketAsyncEventArgs socket_recv_async, eTokenType type, Log.ILogger logger, IConfigNetwork config_network)
+        protected UserToken(SocketBase socket, SocketAsyncEventArgs send_event_args, SocketAsyncEventArgs recv_event_args, eTokenType type, Log.ILogger logger, IConfigNetwork config_network)
         {
             this.Socket = socket;
             this.Logger = logger;   
 
             TokenType = type;
-            LocalEndPoint = (IPEndPoint)local_endpoint;
-            RemoteEndPoint = (IPEndPoint)remote_endpoint;
 
-            SendAsyncEvent = socket_send_async;
-            RecvAsyncEvent = socket_recv_async;
+            mLocalEndPoint = (IPEndPoint?)socket.GetSocket?.LocalEndPoint;
+            mRemoteEndPoint = (IPEndPoint?)socket.GetSocket?.RemoteEndPoint;
+
+            SendAsyncEvent = send_event_args;
+            RecvAsyncEvent = recv_event_args;
 
             var config_socket = config_network.config_socket;
 

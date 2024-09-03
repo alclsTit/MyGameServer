@@ -61,11 +61,6 @@ namespace ServerEngine.Network.SystemLib
         protected volatile int mState = (int)eNetworkSystemState.None;
 
         /// <summary>
-        /// IPEndpoint (ip, port 등..) 반환
-        /// </summary>
-        public IPEndPoint GetIPEndPoint => mListenInfo.ipEndpoint;
-
-        /// <summary>
         /// Start 관련 작업에 사용되는 메서드
         /// </summary>
         /// <returns></returns>
@@ -103,7 +98,7 @@ namespace ServerEngine.Network.SystemLib
         /// 클래스 멤버필드관련 초기화 메서드 
         /// * 호출하는 곳에서 파라미터에 대한 익셉션을 던지고 있기 때문에 이곳에서 별도로 처리하지 않는다
         /// </summary>
-        public virtual void Initialize(ServerModuleBase module, IListenInfo listenInfo, ServerConfig serverInfo, Log.Logger logger, Func<Session> creater)
+        public virtual void Initialize(ServerModuleBase module, ServerConfig serverInfo, Log.Logger logger, Func<Session> creater)
         {
             if (listenInfo == null)
                 throw new ArgumentNullException(nameof(listenInfo));
@@ -116,8 +111,6 @@ namespace ServerEngine.Network.SystemLib
 
             if (creater == null)
                 throw new ArgumentNullException(nameof(creater));
-
-            mListenInfo = new ListenInfo(listenInfo.ip, listenInfo.port, listenInfo.backlog, listenInfo.serverName, listenInfo.nodelay);
 
             mServerInfo = serverInfo;
             this.Logger = logger;
