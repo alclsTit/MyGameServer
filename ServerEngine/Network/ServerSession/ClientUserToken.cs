@@ -1,5 +1,7 @@
-﻿using ServerEngine.Network.SystemLib;
+﻿using ServerEngine.Config;
+using ServerEngine.Network.SystemLib;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
@@ -8,13 +10,79 @@ using System.Threading.Tasks;
 
 namespace ServerEngine.Network.ServerSession
 {
+    public class ClientUserTokenManager : UserTokenManager
+    {
+        #region Lazy Singleton
+        //public static readonly Lazy<ClientUserTokenManager> mInstance = new Lazy<ClientUserTokenManager>(() => new ClientUserTokenManager());
+        //public static ClientUserTokenManager Instance => mInstance.Value;
+        //private ClientUserTokenManager() { }
+        #endregion
+
+        private ConcurrentDictionary<int, List<ClientUserToken>> mThreadUserTokens = new ConcurrentDictionary<int, List<ClientUserToken>>();
+        public ConcurrentDictionary<long, ClientUserToken> UserTokens { get; private set; } = new ConcurrentDictionary<long, ClientUserToken>();
+
+        public ClientUserTokenManager(Log.ILogger logger, IConfigNetwork config_network)
+            : base(logger, config_network)
+        {
+        }
+
+        public bool Initialize(int max_connection)
+        {
+            if (0 >= max_connection)
+                throw new ArgumentNullException(nameof(max_connection));
+
+            try
+            {
+                int max_io_thread_count = base.m_config_network.max_io_thread_count;
+                int user_per_thread = (int)(max_connection / max_io_thread_count);
+                for (var i = 0; i < max_io_thread_count; ++i)
+                    mThreadUserTokens.TryAdd(i, new List<ClientUserToken>(user_per_thread));
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Exception in ClientUserTokenManager.Initialize() - {ex.Message} - {ex.StackTrace}", ex);
+                return false;
+            }
+        }
+
+        public bool TryAddUserToken(long uid, ClientUserToken token)
+        {
+            if (0 >= uid)
+                throw new ArgumentException(nameof(uid));
+
+            if (null == token)
+                throw new ArgumentNullException(nameof(token));
+
+            var index = (int)(uid % base.m_config_network.max_io_thread_count);
+            mThreadUserTokens[index].Add(token);
+
+            return UserTokens.TryAdd(uid, token);
+        }
+
+        public async ValueTask Run(int index)
+        {
+            if (0 > index || base.m_config_network.max_io_thread_count <= index)
+                throw new ArgumentException($"Index {index}");
+
+            while (true)
+            {
+                foreach (var token in mThreadUserTokens[index])
+                {
+                    await token.SendAsync();
+                }
+
+                Thread.Sleep(10);
+            }
+        }
+    }
+
     public class ClientUserToken : UserToken
     {
-        public ClientUserToken(SocketBase socket, bool client_connect = true)
-            : base(socket)
+        public ClientUserToken() : base()
         {
-            IsClientConnect = client_connect;
-
+            IsClientConnect = true;
         }
     }
 }

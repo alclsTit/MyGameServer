@@ -13,6 +13,7 @@ using ServerEngine.Network.SystemLib;
 using ServerEngine.Network.ServerSession;
 using ServerEngine.Config;
 using System.Collections.Frozen;
+using Microsoft.Extensions.ObjectPool;
 
 namespace ServerEngine.Network.Server
 {
@@ -30,19 +31,21 @@ namespace ServerEngine.Network.Server
         }
 
         /// <summary>
-        /// server_module name
-        /// </summary>
-        public string Name { get; private set; }
-
-        /// <summary>
         /// server_module state
         /// </summary>
         private volatile int mState = (int)eServerState.None;
 
         /// <summary>
-        /// server_module logger
+        /// Server Module endpoint info
         /// </summary>
-        public Log.ILogger Logger { get; }
+        private IPEndPoint mLocalEndPoint;
+
+        /// <summary>
+        /// Microsoft.Extensions.ObjectPool
+        /// </summary>
+        protected DisposableObjectPool<SocketAsyncEventArgs> mSendEventArgsPool, mRecvEventArgsPool;
+
+        private DisposableObjectPool<ClientUserToken> mClientUserTokenPool;
 
         #region "2022.05.04 기존 커스텀 ObjectPool -> Microsoft.Extensions.ObjectPool로 변경에 따른 코드 주석처리"
         /*
@@ -50,21 +53,6 @@ namespace ServerEngine.Network.Server
         public SocketAsyncEventArgsPool mSendEventPool { get; private set; }
         */
         #endregion
-
-        #region "Microsoft.Extensions.ObjectPool"
-        private Microsoft.Extensions.ObjectPool.DefaultObjectPoolProvider mSocketEventArgsPoolProvider;
-        private SocketEventArgsObjectPoolPolicy SocketEventArgsPoolPolicy;
-        //public Microsoft.Extensions.ObjectPool.ObjectPool<SocketAsyncEventArgs> mSendEventArgsPool { get; private set; }
-        //public Microsoft.Extensions.ObjectPool.ObjectPool<SocketAsyncEventArgs> mRecvEventArgsPool { get; private set; }
-        public DisposableObjectPool<SocketAsyncEventArgs> mSendEventArgsPool { get; private set; }
-        public DisposableObjectPool<SocketAsyncEventArgs> mRecvEventArgsPool { get; private set; }
-        
-        #endregion
-
-        /// <summary>
-        /// server_module config
-        /// </summary>
-        protected IConfigCommon Config { get; private set; }
 
         /// <summary>
         /// 서버 세션 매니저
@@ -88,8 +76,7 @@ namespace ServerEngine.Network.Server
         /// </summary>
         public List<IConfigListen> config_listen_list { get; private set; }
 
-        private IPEndPoint mLocalEndPoint;
-
+     
         /// <summary>
         /// 각각의 서버모듈이 작동하기 시작한 시작시간 (utc+0)
         /// </summary>
@@ -100,10 +87,37 @@ namespace ServerEngine.Network.Server
         /// </summary>
         public DateTime mLastActiveTime { get; protected set; }
 
-        #region property
+    #region property
+        /// <summary>
+        /// server_module name
+        /// </summary>
+        public string Name { get; private set; }
+
+        /// <summary>
+        /// server_module logger
+        /// </summary>
+        public Log.ILogger Logger { get; }
+
+        /// <summary>
+        /// server_module config
+        /// </summary>
+        protected IConfigCommon Config { get; private set; }
+
+        /// <summary>
+        /// Manage Client Access UserToken
+        /// </summary>
+        public ClientUserTokenManager ClientUserTokenManager { get; private set; }
+
+        /// <summary>
+        /// Get ServerModule State
+        /// </summary>
         public int GetState => mState;
+
+        /// <summary>
+        /// Get Server Module ip_address and port
+        /// </summary>
         public IPEndPoint GetLocalEndPoint => mLocalEndPoint;
-        #endregion
+    #endregion
 
         protected ServerModuleBase(string name, Log.ILogger logger, IConfigCommon config, IAsyncEventCallbackHandler.AsyncEventCallbackHandler handler)
         {
@@ -115,7 +129,6 @@ namespace ServerEngine.Network.Server
 
             // Microsoft.Extensions.ObjectPool 사용
             // ObjectPool에서 관리하는 최대 풀 객체 수 세팅
-            //mSocketEventArgsPoolProvider = new Microsoft.Extensions.ObjectPool.DefaultObjectPoolProvider();
             int maximum_retained = 0;
             var pool_default_size = config.config_etc.pools.list.FirstOrDefault(e => e.name.ToLower().Trim() == name.ToLower().Trim())?.default_size;
             
@@ -130,6 +143,11 @@ namespace ServerEngine.Network.Server
             // ObjectPool 객체에 callback handler만 선제적으로 등록
             mSendEventArgsPool = new DisposableObjectPool<SocketAsyncEventArgs>(new SocketEventArgsObjectPoolPolicy(handler), maximum_retained);
             mRecvEventArgsPool = new DisposableObjectPool<SocketAsyncEventArgs>(new SocketEventArgsObjectPoolPolicy(handler), maximum_retained);
+
+            mClientUserTokenPool = new DisposableObjectPool<ClientUserToken>(new DefaultPooledObjectPolicy<ClientUserToken>(), maximum_retained);
+
+            // Client에서 접속해서 생성된 UserToken 관리
+            ClientUserTokenManager = new ClientUserTokenManager(logger, config.config_network);
         }
 
         public bool UpdateState(eServerState state)
@@ -140,19 +158,6 @@ namespace ServerEngine.Network.Server
 
             return old_state == Interlocked.Exchange(ref mState, (int)state) ? true : false;
         }
-
-        // 삭제예정
-        /*public bool ChangeState(int oldState, int newState)
-        {
-            var curState = mState;
-            if (curState == newState)
-                return true;
-
-            if (Interlocked.Exchange(ref mState, newState) == oldState)
-                return true;
-
-            return false;
-        }*/
 
         public virtual bool Initialize()
         {
@@ -256,6 +261,57 @@ namespace ServerEngine.Network.Server
         public virtual void Stop()
         {
             mNetworkSystem.Stop();
+        }
+
+        public virtual void OnNewClientCreateHandler(SocketAsyncEventArgs e)
+        {
+            // accept 및 connect callback handler에서 해당 메서드를 호출
+            // socketasynceventargs를 사용하면 비동기 호출한 대상의 usertoken은 알 수 있음
+            // 다만, 현재 서버에서 관리중인 전체 usertoken은 알 방법이 없음. usertoken은 session 객체에 포함될 네트워크 기능을 포함하고 있는 멤버객체가 될 예정 
+
+            // UserToken 을 클라이언트 / 서버용 따로관리
+            var last_operation = e.LastOperation;
+            if (SocketAsyncOperation.Connect != last_operation || SocketAsyncOperation.Accept != last_operation)
+            {
+                Logger.Error($"Error in TcpAcceptor.OnNewClientCreateHandler() - SocketAsyncOperation Error. LastOperation = {last_operation}");
+                return;
+            }
+
+            if (e.UserToken?.GetType() == typeof(ClientUserToken))
+            {
+                // connection request by client
+                var token = e.UserToken as ClientUserToken;
+                if (null == token)
+                {
+                    Logger.Error($"Error in TcpAcceptor.OnNewClientCreateHandler() - Fail to UserToken Casting [ClientUserToken]");
+                    return;
+                }
+
+                if (null == e.ConnectSocket)
+                {
+                    Logger.Error($"Error in TcpAcceptor.OnNewClientCreateHandler() - ConnectSocket is null");
+                    return;
+                }
+
+                var client_token = mClientUserTokenPool.Get();
+                client_token.Initialize(Logger, Config.config_network, new TcpSocket(e.ConnectSocket, Logger), UserToken.eTokenType.Client, mSendEventArgsPool.Get(), mRecvEventArgsPool.Get());
+
+                ClientUserTokenManager.TryAddUserToken();
+
+            }
+            else
+            {
+                // connection request by server 
+                var token = e.UserToken as ServerUserToken;
+                if (null == token)
+                {
+                    Logger.Error($"Error in TcpAcceptor.OnNewClientCreateHandler() - Fail to UserToken Casting [ServerUserToken]");
+                    return;
+                }
+            }
+
+
+
         }
 
         public virtual Session NewClientSessionCreate(string sessionID, SocketAsyncEventArgs e, Logger logger, Func<Session> creater, bool isClient)

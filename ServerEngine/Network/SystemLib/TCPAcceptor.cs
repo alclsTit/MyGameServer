@@ -10,6 +10,7 @@ using System.Threading;
 using ServerEngine.Common;
 using ServerEngine.Network.ServerSession;
 using ServerEngine.Config;
+using ServerEngine.Network.Server;
 
 namespace ServerEngine.Network.SystemLib
 {
@@ -18,11 +19,6 @@ namespace ServerEngine.Network.SystemLib
     /// </summary>
     public class TcpAcceptor : NetworkSystemBase
     {
-        /// <summary>
-        /// dependent on server_name
-        /// </summary>
-        public string Name { get; private set; }
-
         /// <summary>
         /// listen socket that used on acceptor
         /// </summary>
@@ -37,25 +33,32 @@ namespace ServerEngine.Network.SystemLib
         /// <summary>
         /// Microsoft.Extensions.ObjectPool - AcceptEventArgs
         /// </summary>
-        #region Microsoft.Extensions.ObjectPool
         private DisposableObjectPool<SocketAsyncEventArgs>? mAcceptEventArgsPool;
-        #endregion
 
         private Thread mAcceptThread;
         private AutoResetEvent mThreadBlockEvent = new AutoResetEvent(false);
         private volatile int mAcceptCount = 0;
 
-        #region property
-        public TcpSocket? GetListenSocket => mListenSocket;
-        #endregion
+    #region property
+        /// <summary>
+        /// dependent on server_name
+        /// </summary>
+        public string Name { get; private set; }
 
-        public TcpAcceptor(string name, Log.ILogger logger) 
-            : base(logger)
+        /// <summary>
+        /// Get ListenSocket
+        /// </summary>
+        public TcpSocket? GetListenSocket => mListenSocket;
+    #endregion
+
+        public TcpAcceptor(string name, Log.ILogger logger, ServerModuleBase server_module) 
+            : base(logger, server_module)
         {
             Name = name;    
             mAcceptThread = new Thread(() => { StartAccept(); });
         }
 
+        #region private method
         private Socket CreateListenSocket()
         {
             if (null == m_config_listen)
@@ -75,6 +78,17 @@ namespace ServerEngine.Network.SystemLib
             }
         }
 
+        private bool CheckMaxConnection()
+        {
+            if (null == m_config_listen)
+                return false;
+
+            var current_connected_count = mAcceptCount;
+            return current_connected_count <= m_config_listen.max_connection ? false : true;
+        }
+        #endregion
+
+        #region public method
         public bool Initialize(IConfigListen config_listen, IConfigEtc config_etc)
         {
             if (null == config_listen) 
@@ -118,6 +132,174 @@ namespace ServerEngine.Network.SystemLib
                 return false;
             }
         }
+
+        public override bool Start()
+        {
+            if (false == CheckState(eNetworkSystemState.Initialized))
+            {
+                Logger.Error($"Error in TcpAcceptor.Start() - TcpAcceptor can't start when state is [{(eNetworkSystemState)mState}]");
+                return false;
+            }
+
+            var new_state = eNetworkSystemState.Running;
+            if (false == UpdateState(new_state))
+            {
+                Logger.Error($"Error in TcpAcceptor.Start() - Fail to update state [{new_state}]");
+                return false;
+            }
+
+            mAcceptThread.Start();
+
+            if (Logger.IsEnableDebug)
+                Logger.Debug($"TcpAccetor Start Complete");
+
+            return true;
+        }
+
+        public void StartAccept()
+        {
+            try
+            {
+                if (null == mListenSocket)
+                    throw new NullReferenceException(nameof(mListenSocket));
+
+                if (null == mAcceptEventArgsPool)
+                    throw new NullReferenceException(nameof(mAcceptEventArgsPool));
+
+                mThreadBlockEvent.WaitOne();
+
+                while (true == CheckMaxConnection())
+                {
+                    // accept된 객체의 수가 현재 max_connection을 초과하게 되는 경우
+                    // 기존 connection이 disconnect 될 때까지 추가 connect를 받지 않고 대기
+                    Thread.Sleep(10);
+                }
+
+                SocketAsyncEventArgs accept_event_args = mAcceptEventArgsPool.Get();
+
+                var pending = mListenSocket.GetSocket?.AcceptAsync(accept_event_args);
+                if (false == pending)
+                    OnAcceptCompleteHandler(null, accept_event_args);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Exception in TcpAcceptor.StartAccept() - {ex.Message} - {ex.StackTrace}");
+                return;
+            }
+        }
+
+        public void OnAcceptCompleteHandler(object? sender, SocketAsyncEventArgs e)
+        {
+            try
+            {
+                var socket_error = e.SocketError;
+                if (false == AsyncCallbackChecker.CheckCallbackHandler_SocketError(socket_error))
+                {
+                    Logger.Error($"Error in TcpAcceptor.OnAcceptCompleteHandler() - SocketError = {socket_error}");
+                    mAcceptEventArgsPool?.Return(e);
+                    return;
+                }
+
+                if (e.UserToken is null)
+                {
+                    Logger.Error($"Error in TcpAcceptor.OnAcceptCompleteHandler() - UserToken is null");
+                    return;
+                }
+
+                ServerModule.OnNewClientCreateHandler(e);
+
+                // 클라이언트로부터의 connect인지. 서버로부터의 connect인지 판단 
+                // connect 요청온 socketasynceventargs의 usertoken을 가지고 비교>?
+                if (e.UserToken?.GetType() == typeof(ClientUserToken))
+                {
+                    // connection request by client
+                    var token = e.UserToken as ClientUserToken;
+                    if (null == token)
+                    {
+                        Logger.Error($"Error in TcpAcceptor.OnAcceptCompleteHandler() - Fail to UserToken Casting [ClientUserToken]");
+                        return;
+                    }
+
+
+
+                }
+                else
+                {
+                    // connection request by server 
+                    var token = e.UserToken as ServerUserToken;
+                    if (null == token)
+                    {
+                        Logger.Error($"Error in TcpAcceptor.OnAcceptCompleteHandler() - Fail to UserToken Casting [ServerUserToken]");
+                        return;
+                    }
+                }
+
+                Interlocked.Increment(ref mAcceptCount);
+
+                mThreadBlockEvent.Set();
+
+                if (Logger.IsEnableDebug)
+                    Logger.Debug($"TcpAcceptor Accept Complete");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Exception in TcpAcceptor.OnAcceptCompleteHandler() - {ex.Message} - {ex.StackTrace}");
+
+                mAcceptEventArgsPool?.Return(e);
+                Interlocked.Decrement(ref mAcceptCount);
+            }
+            finally
+            {
+                StartAccept();
+            }
+        }
+
+        public override void Stop()
+        {
+            try
+            {
+                var state = (eNetworkSystemState)mState;
+                if (true == base.CheckStop())
+                {
+                    Logger.Error($"Error in TcpAcceptor.Stop() - Stop process is already working. state = [{state}]");
+                    return;
+                }
+
+                if (false == base.UpdateState(eNetworkSystemState.Stopping))
+                {
+                    Logger.Error($"Error in TcpAcceptor.Stop() - Fail to update state [{state}] -> [{eNetworkSystemState.Stopping}]");
+                    return;
+                }
+
+                if (null == Interlocked.CompareExchange(ref mListenSocket, null, null) ||
+                    true == mListenSocket?.IsNullSocket())
+                {
+                    return;
+                }
+
+                mThreadBlockEvent.WaitOne();
+
+                if (true == mListenSocket?.GetSocket?.Connected)
+                {
+                    mListenSocket?.GetSocket?.Shutdown(SocketShutdown.Both);
+                    mListenSocket?.GetSocket?.Close();
+                }
+
+                mAcceptEventArgsPool?.Dispose();
+
+                UpdateState(eNetworkSystemState.StopComplete);
+
+                mThreadBlockEvent.Set();
+
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Exception in TcpAcceptor.Stop() - {ex.Message} - {ex.StackTrace}", ex);
+                return;
+            }
+        }
+
+        #endregion
 
         /// <summary>
         /// TCPListener 멤버 데이터 초기화 
@@ -171,134 +353,6 @@ namespace ServerEngine.Network.SystemLib
             return true;
         }
         */
-
-        public override bool Start()
-        {
-            if (false == CheckState(eNetworkSystemState.Initialized))
-            {
-                Logger.Error($"Error in TcpAcceptor.Start() - TcpAcceptor can't start when state is [{(eNetworkSystemState)mState}]");
-                return false;
-            }
-
-            var new_state = eNetworkSystemState.Running;
-            if (false == UpdateState(new_state))
-            {
-                Logger.Error($"Error in TcpAcceptor.Start() - Fail to update state [{new_state}]");
-                return false;
-            }
-
-            mAcceptThread.Start();
-
-            if (Logger.IsEnableDebug)
-                Logger.Debug($"TcpAccetor Start Complete");
-
-            return true;
-        }
-
-        public void StartAccept()
-        {
-            try
-            {
-                if (null == mListenSocket)
-                    throw new NullReferenceException(nameof(mListenSocket));
-
-                if (null == mAcceptEventArgsPool)
-                    throw new NullReferenceException(nameof(mAcceptEventArgsPool));
-
-                mThreadBlockEvent.WaitOne();
-
-                while(true == CheckMaxConnection())
-                {
-                    // accept된 객체의 수가 현재 max_connection을 초과하게 되는 경우
-                    // 기존 connection이 disconnect 될 때까지 추가 connect를 받지 않고 대기
-                    Thread.Sleep(10);
-                }
-
-                SocketAsyncEventArgs accept_event_args = mAcceptEventArgsPool.Get();
-
-                var pending = mListenSocket.GetSocket?.AcceptAsync(accept_event_args);
-                if (false == pending)
-                    OnAcceptCompleteHandler(null, accept_event_args);
-            }
-            catch (Exception ex)
-            {
-                Logger.Error($"Exception in TcpAcceptor.StartAccept() - {ex.Message} - {ex.StackTrace}");
-                return;
-            }
-        }
-
-        public void OnAcceptCompleteHandler(object? sender, SocketAsyncEventArgs e)
-        {
-            try
-            {
-                var socket_error = e.SocketError;
-                if (false == AsyncCallbackChecker.CheckCallbackHandler_SocketError(socket_error))
-                {
-                    Logger.Error($"Error in TcpAcceptor.OnAcceptCompleteHandler() - SocketError = {socket_error}");
-                    mAcceptEventArgsPool?.Return(e);
-                    return;
-                }
-
-                if (e.UserToken is null)
-                {
-                    Logger.Error($"Error in TcpAcceptor.OnAcceptCompleteHandler() - UserToken is null");
-                    return;
-                }
-
-                // 클라이언트로부터의 connect인지. 서버로부터의 connect인지 판단 
-                // connect 요청온 socketasynceventargs의 usertoken을 가지고 비교>?
-                if (e.UserToken?.GetType() == typeof(ClientUserToken))
-                {
-                    // connection request by client
-                    var token = e.UserToken as ClientUserToken;
-                    if (null == token)
-                    {
-                        Logger.Error($"Error in TcpAcceptor.OnAcceptCompleteHandler() - Fail to UserToken Casting [ClientUserToken]");
-                        return;
-                    }
-
-                    
-
-                }
-                else
-                {
-                    // connection request by server 
-                    var token = e.UserToken as ServerUserToken;
-                    if (null == token)
-                    {
-                        Logger.Error($"Error in TcpAcceptor.OnAcceptCompleteHandler() - Fail to UserToken Casting [ServerUserToken]");
-                        return;
-                    }
-                }
-
-                Interlocked.Increment(ref mAcceptCount);
-
-                mThreadBlockEvent.Set();
-
-                if (Logger.IsEnableDebug)
-                    Logger.Debug($"TcpAcceptor Accept Complete");
-            }
-            catch (Exception ex)
-            {
-                Logger.Error($"Exception in TcpAcceptor.OnAcceptCompleteHandler() - {ex.Message} - {ex.StackTrace}");
-
-                mAcceptEventArgsPool?.Return(e);
-                Interlocked.Decrement(ref mAcceptCount);
-            }
-            finally
-            {
-                StartAccept();
-            }
-        }
-
-        private bool CheckMaxConnection()
-        {
-            if (null == m_config_listen)
-                return false;
-
-            var current_connected_count = mAcceptCount;
-            return current_connected_count <= m_config_listen.max_connection? false : true;
-        }
 
         /// <summary>
         /// 한 번만 진행되어야하는 Start 작업
@@ -463,52 +517,6 @@ namespace ServerEngine.Network.SystemLib
             catch(Exception ex)
             {
                 logger.Error(this.ClassName(), this.MethodName(), ex);
-            }
-        }
-
-
-        public override void Stop()
-        {
-            try
-            {
-                var state = (eNetworkSystemState)mState;
-                if (true == base.CheckStop())
-                {
-                    Logger.Error($"Error in TcpAcceptor.Stop() - Stop process is already working. state = [{state}]");
-                    return;
-                }
-
-                if (false == base.UpdateState(eNetworkSystemState.Stopping))
-                {
-                    Logger.Error($"Error in TcpAcceptor.Stop() - Fail to update state [{state}] -> [{eNetworkSystemState.Stopping}]");
-                    return;
-                }
-
-                if (null == Interlocked.CompareExchange(ref mListenSocket, null, null) || 
-                    true == mListenSocket?.IsNullSocket())
-                {
-                    return;
-                }
-
-                mThreadBlockEvent.WaitOne();
-
-                if (true == mListenSocket?.GetSocket?.Connected)
-                {
-                    mListenSocket?.GetSocket?.Shutdown(SocketShutdown.Both);
-                    mListenSocket?.GetSocket?.Close();
-                }
-
-                mAcceptEventArgsPool?.Dispose();
-
-                UpdateState(eNetworkSystemState.StopComplete);
-
-                mThreadBlockEvent.Set();
-
-            }
-            catch (Exception ex)
-            {
-                Logger.Error($"Exception in TcpAcceptor.Stop() - {ex.Message} - {ex.StackTrace}", ex);
-                return;
             }
         }
 

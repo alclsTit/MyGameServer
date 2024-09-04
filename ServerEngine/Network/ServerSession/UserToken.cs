@@ -5,6 +5,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Reflection.Metadata.Ecma335;
+using System.Security.AccessControl;
 using System.Text;
 using System.Threading.Channels;
 using System.Threading.Tasks;
@@ -13,10 +14,23 @@ using ServerEngine.Config;
 using ServerEngine.Log;
 using ServerEngine.Network.Message;
 using ServerEngine.Network.SystemLib;
+using ServerEngine.Common;
 
 namespace ServerEngine.Network.ServerSession
 {
-    public class UserTokenManager
+    public abstract class UserTokenManager
+    {
+        protected Log.ILogger Logger;
+        protected IConfigNetwork m_config_network;
+
+        protected UserTokenManager(Log.ILogger logger, IConfigNetwork config_network)
+        {
+            this.Logger = logger;
+            m_config_network = config_network;
+        }
+    }
+
+    /*public class UserTokenManager
     {
         #region Lazy Singletone
         public static readonly Lazy<UserTokenManager> m_instance = new Lazy<UserTokenManager>(() => new UserTokenManager());
@@ -24,7 +38,7 @@ namespace ServerEngine.Network.ServerSession
         private UserTokenManager() {}
         #endregion
 
-        private ConcurrentDictionary<int, List<UserToken>> mThreadUserTokens = new ConcurrentDictionary<int, List<UserToken>>();                      // key : thread_index 
+        private ConcurrentDictionary<int, List<UserToken>> mThreadUserTokens = new ConcurrentDictionary<int, List<UserToken>>();            // key : thread_index 
         public ConcurrentDictionary<long, UserToken> UserTokens { get; private set; } = new ConcurrentDictionary<long, UserToken>();        // key : uid
         
         private Log.ILogger? Logger;
@@ -77,8 +91,9 @@ namespace ServerEngine.Network.ServerSession
             }
         }
     }
+    */
 
-    public abstract class UserToken
+    public abstract class UserToken : IDisposable
     {
         public enum eTokenType
         {
@@ -89,11 +104,14 @@ namespace ServerEngine.Network.ServerSession
 
         private IPEndPoint? mLocalEndPoint;
         private IPEndPoint? mRemoteEndPoint;
+        private bool mDisposed = false;
+        private volatile bool mConnected = false;
 
         #region property
-        public bool Connected { get; protected set; }
-        public bool IsClientConnect { get; protected set; }
-        public eTokenType TokenType { get; protected set; }
+        public long mUid = 0;
+        public bool Connected => mConnected;
+        public bool IsClientConnect { get; protected set; } = false;
+        public eTokenType TokenType { get; protected set; } = eTokenType.None;
 
         protected Channel<ArraySegment<byte>> SendQueue { get; private set; }
         public SocketBase Socket { get; protected set; }
@@ -107,10 +125,12 @@ namespace ServerEngine.Network.ServerSession
         public IPEndPoint? GetRemoteEndPoint => mRemoteEndPoint;
         #endregion
 
-        protected UserToken(SocketBase socket, SocketAsyncEventArgs send_event_args, SocketAsyncEventArgs recv_event_args, eTokenType type, Log.ILogger logger, IConfigNetwork config_network)
+        protected UserToken() { }
+
+        public virtual bool Initialize(Log.ILogger logger, IConfigNetwork config_network, SocketBase socket, eTokenType type, SocketAsyncEventArgs send_event_args, SocketAsyncEventArgs recv_event_args)
         {
             this.Socket = socket;
-            this.Logger = logger;   
+            this.Logger = logger;
 
             TokenType = type;
 
@@ -124,6 +144,10 @@ namespace ServerEngine.Network.ServerSession
 
             SendQueue = Channel.CreateBounded<ArraySegment<byte>>(capacity: config_socket.send_queue_size);
             MessageHandler = new MessageProcessor(config_socket.recv_buff_size);
+
+            mConnected = true;
+
+            return true;
         }
 
         public virtual void StartSend(ArraySegment<byte> buffer)
@@ -157,6 +181,9 @@ namespace ServerEngine.Network.ServerSession
 
         public virtual async ValueTask SendAsync()
         {
+            if (false == Connected)
+                return;
+
             SendQueue.Writer.Complete();
             await foreach(var item in SendQueue.Reader.ReadAllAsync())
             {
@@ -213,10 +240,25 @@ namespace ServerEngine.Network.ServerSession
 
         public virtual void Dispose()
         {
-            Socket.Dispose();
+            if (mDisposed)
+                return;
 
-            Connected = false;
+            Socket.Dispose();
+            SendAsyncEvent.Dispose();
+            RecvAsyncEvent.Dispose();
+
+            mConnected = false;
+            IsClientConnect = false;
             TokenType = eTokenType.None;
+
+            // Todo : SendQueue에 보내야할 데이터가 남아있을 때 처리작업 필요
+            /*if (0 < SendQueue.Reader.Count)
+            {
+                await SendAsync();
+            }
+            */
+
+            mDisposed = true;
         }
     }
 }
