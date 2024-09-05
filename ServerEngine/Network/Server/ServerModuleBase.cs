@@ -63,7 +63,7 @@ namespace ServerEngine.Network.Server
         /// <summary>
         /// 서버모듈이 가지고 있는 Accept / Connect 객체 (1:1 관계)
         /// </summary>
-        public INetworkSystemBase mNetworkSystem { get; private set; }
+        public NetworkSystemBase Acceptor { get; private set; }
 
         public ServerConfig mServerInfo { get; private set; }
 
@@ -121,7 +121,7 @@ namespace ServerEngine.Network.Server
         public IPEndPoint GetLocalEndPoint => mLocalEndPoint;
     #endregion
 
-        protected ServerModuleBase(string name, Log.ILogger logger, IConfigCommon config, IAsyncEventCallbackHandler.AsyncEventCallbackHandler handler)
+        protected ServerModuleBase(string name, Log.ILogger logger, IConfigCommon config, IAsyncEventCallbackHandler.AsyncEventCallbackHandler handler, NetworkSystemBase acceptor)
         {
             this.Name = name;
             this.Logger = logger;
@@ -153,6 +153,9 @@ namespace ServerEngine.Network.Server
 
             // Create UidGenerator
             mUidGenerators = new Dictionary<UIDGenerator.eGenerateType, UIDGenerator>();
+
+            // Accpetor (tcp / udp)
+            Acceptor = acceptor;
         }
 
         public bool UpdateState(eServerState state)
@@ -174,8 +177,6 @@ namespace ServerEngine.Network.Server
             }
             
             mLocalEndPoint = ServerHostFinder.GetServerIPAddress(config_listen.port);
-
-            // Todo: db에서 
 
             var old_state = (eServerState)mState;
             var new_state = eServerState.Initialized;
@@ -318,11 +319,20 @@ namespace ServerEngine.Network.Server
                     return;
                 }
 
-                var client_token = mClientUserTokenPool.Get();
-                client_token.Initialize(Logger, Config.config_network, new TcpSocket(e.ConnectSocket, Logger), mSendEventArgsPool.Get(), mRecvEventArgsPool.Get(), token_id);
+                try
+                {
+                    // usertoken processing
+                    var client_token = mClientUserTokenPool.Get();
+                    client_token.Initialize(Logger, Config.config_network, new TcpSocket(e.ConnectSocket, Logger), mSendEventArgsPool.Get(), mRecvEventArgsPool.Get(), token_id);
 
-                ClientUserTokenManager.TryAddUserToken(token_id, client_token);
+                    ClientUserTokenManager.TryAddUserToken(token_id, client_token);
 
+                }
+                catch (Exception ex) 
+                {
+                    Logger.Error($"Exception in ServerModuleBase.OnNewClientCreateHandler() - {ex.Message} - {ex.StackTrace}", ex);
+                    return;
+                }
             }
             else
             {
@@ -339,7 +349,7 @@ namespace ServerEngine.Network.Server
 
         }
 
-        public virtual Session NewClientSessionCreate(string sessionID, SocketAsyncEventArgs e, Logger logger, Func<Session> creater, bool isClient)
+        /*public virtual Session NewClientSessionCreate(string sessionID, SocketAsyncEventArgs e, Logger logger, Func<Session> creater, bool isClient)
         {
             if (e.LastOperation != SocketAsyncOperation.Accept && 
                 e.LastOperation != SocketAsyncOperation.Connect)
@@ -358,34 +368,34 @@ namespace ServerEngine.Network.Server
             //session.Initialize(sessionID, socket, mServerInfo, logger, mListenInfoList, isClient);
 
             #region "2022.05.04 기존 커스텀 ObjectPool -> Microsoft.Extensions.ObjectPool로 변경에 따른 코드 주석처리"
-            /*
-            if (mRecvEventPool.IsEmpty)
-            {
-                if (logger.IsWarnEnabled)
-                    logger.Warn(this.ClassName(), this.MethodName(), "[Recv] SocketAsyncEventArgsPool is empty. Increase pool max count");
-            }
-
-            if (mSendEventPool.IsEmpty)
-            {
-                if (logger.IsWarnEnabled)
-                    logger.Warn(this.ClassName(), this.MethodName(), "[Send] SocketAsyncEventArgsPool is empty. Increase pool max count");
-            }
-            */
-            #endregion
+            
+            //if (mRecvEventPool.IsEmpty)
+            //{
+            //    if (logger.IsWarnEnabled)
+            //        logger.Warn(this.ClassName(), this.MethodName(), "[Recv] SocketAsyncEventArgsPool is empty. Increase pool max count");
+            //}
+            //
+            //if (mSendEventPool.IsEmpty)
+            //{
+            //    if (logger.IsWarnEnabled)
+            //        logger.Warn(this.ClassName(), this.MethodName(), "[Send] SocketAsyncEventArgsPool is empty. Increase pool max count");
+            //}
+            //
+            //#endregion
 
             session.Closed += OnSessionClosed;
 
             #region "2022.05.04 기존 커스텀 ObjectPool -> Microsoft.Extensions.ObjectPool로 변경에 따른 코드 주석처리"
-            /*
-            session.SetRecvEventByPool(mRecvEventPool.Pop());
-            session.SetSendEventByPool(mSendEventPool.Pop());
-            */
+            
+            //session.SetRecvEventByPool(mRecvEventPool.Pop());
+            //session.SetSendEventByPool(mSendEventPool.Pop());
+            
             #endregion
             session.SetSendEventByPool(mSendEventArgsPool.Get());
             session.SetRecvEventByPool(mRecvEventArgsPool.Get());
 
             return session;
-        }
+        }*/
          
         public virtual void OnSessionClosed(Session session, eCloseReason reason)
         {
@@ -411,11 +421,12 @@ namespace ServerEngine.Network.Server
             mSessionManager.Close(session.mSessionID);
         }
 
-        private void OnNetworkSystemStopped(object? sender, EventArgs e)
+        /*private void OnNetworkSystemStopped(object? sender, EventArgs e)
         {
             if (Logger.IsEnableDebug)
                 Logger.Debug($"[{this.Name}][{ipEndPoint.Address}:{ipEndPoint.Port}] was stopped");
         }
+        */
 
         public string GetConnectedServerName(EndPoint endPoint)
         {

@@ -51,8 +51,8 @@ namespace ServerEngine.Network.SystemLib
         public TcpSocket? GetListenSocket => mListenSocket;
     #endregion
 
-        public TcpAcceptor(string name, Log.ILogger logger, ServerModuleBase server_module) 
-            : base(logger, server_module)
+        public TcpAcceptor(string name, Log.ILogger logger, ServerModuleBase module) 
+            : base(logger, module)
         {
             Name = name;    
             mAcceptThread = new Thread(() => { StartAccept(); });
@@ -88,8 +88,13 @@ namespace ServerEngine.Network.SystemLib
         }
         #endregion
 
-        #region public method
-        public bool Initialize(IConfigListen config_listen, IConfigEtc config_etc)
+        #region public_method
+        public override bool Initialize()
+        {
+            throw new NotSupportedException();
+        }
+
+        public override bool Initialize(IConfigListen config_listen, IConfigEtc config_etc)
         {
             if (null == config_listen) 
                 throw new ArgumentNullException(nameof(config_listen));
@@ -99,8 +104,6 @@ namespace ServerEngine.Network.SystemLib
 
             try
             {
-                base.Initialize();
-
                 m_config_listen = config_listen;
                 m_config_etc = config_etc;
 
@@ -156,6 +159,11 @@ namespace ServerEngine.Network.SystemLib
             return true;
         }
 
+        public override bool Start(string address, ushort port, bool client_connect = true)
+        {
+            throw new NotSupportedException();
+        }
+
         public void StartAccept()
         {
             try
@@ -207,32 +215,6 @@ namespace ServerEngine.Network.SystemLib
                 }
 
                 ServerModule.OnNewClientCreateHandler(e);
-
-                // 클라이언트로부터의 connect인지. 서버로부터의 connect인지 판단 
-                // connect 요청온 socketasynceventargs의 usertoken을 가지고 비교>?
-                if (e.UserToken?.GetType() == typeof(ClientUserToken))
-                {
-                    // connection request by client
-                    var token = e.UserToken as ClientUserToken;
-                    if (null == token)
-                    {
-                        Logger.Error($"Error in TcpAcceptor.OnAcceptCompleteHandler() - Fail to UserToken Casting [ClientUserToken]");
-                        return;
-                    }
-
-
-
-                }
-                else
-                {
-                    // connection request by server 
-                    var token = e.UserToken as ServerUserToken;
-                    if (null == token)
-                    {
-                        Logger.Error($"Error in TcpAcceptor.OnAcceptCompleteHandler() - Fail to UserToken Casting [ServerUserToken]");
-                        return;
-                    }
-                }
 
                 Interlocked.Increment(ref mAcceptCount);
 
@@ -298,7 +280,6 @@ namespace ServerEngine.Network.SystemLib
                 return;
             }
         }
-
         #endregion
 
         /// <summary>

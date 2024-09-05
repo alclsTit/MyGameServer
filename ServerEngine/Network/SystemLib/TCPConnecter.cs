@@ -31,8 +31,8 @@ namespace ServerEngine.Network.SystemLib
         public IPEndPoint? GetRemoteEndPoint => mRemoteEndpoint;
         #endregion
 
-        public TcpConnector(string name, Log.ILogger logger)
-            : base(logger)
+        public TcpConnector(string name, Log.ILogger logger, ServerModuleBase module)
+            : base(logger, module)
         {
             Name = name;
         }
@@ -68,12 +68,11 @@ namespace ServerEngine.Network.SystemLib
             }
         }*/
 
-        public bool Initialize()
+        #region public_method
+        public override bool Initialize()
         {
             try
             {
-                base.Initialize();
-
                 mClientSocket = new TcpSocket(new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp), base.Logger);
 
                 var old_state = (eNetworkSystemState)mState;
@@ -96,6 +95,16 @@ namespace ServerEngine.Network.SystemLib
             }
         }
 
+        public override bool Initialize(IConfigListen config_listen, IConfigEtc config_etc)
+        {
+            throw new NotSupportedException();
+        }
+
+        public override bool Start()
+        {
+            throw new NotSupportedException();
+        }
+
         /// <summary>
         /// request connect to server
         /// </summary>
@@ -103,7 +112,7 @@ namespace ServerEngine.Network.SystemLib
         /// <param name="port">port</param>
         /// <param name="client_connect">boolean that defines client or server connection</param>
         /// <exception cref="ArgumentNullException"></exception>
-        public void StartConnect(string address, ushort port, bool client_connect = true)
+        public override bool Start(string address, ushort port, bool client_connect = true)
         {
             if (string.IsNullOrEmpty(address))
                 throw new ArgumentNullException(nameof(address));
@@ -119,14 +128,14 @@ namespace ServerEngine.Network.SystemLib
                 var state = (eNetworkSystemState)mState;
                 if (eNetworkSystemState.None >= state)
                 {
-                    Logger.Error($"Error in TcpConnector.StartConnect() - Can' Start Connect. state = {state}");
-                    return;
+                    Logger.Error($"Error in TcpConnector.Start() - Can' Start Connect. state = {state}");
+                    return false;
                 }
 
                 ConnectEventArgs = new SocketAsyncEventArgs();
                 ConnectEventArgs.Completed += new EventHandler<SocketAsyncEventArgs>(OnConnectCompleteHandler);
                 ConnectEventArgs.RemoteEndPoint = new IPEndPoint(IPAddress.Parse(address), port);
-                ConnectEventArgs.UserToken = true == client_connect ? new ClientUserToken(true) : new ServerUserToken(false);
+                ConnectEventArgs.UserToken = true == client_connect ? new ClientUserToken() : new ServerUserToken();
 
                 var pending = mClientSocket.GetSocket?.ConnectAsync(ConnectEventArgs);
                 if (false == pending)
@@ -136,11 +145,13 @@ namespace ServerEngine.Network.SystemLib
 
                 if (Logger.IsEnableDebug)
                     Logger.Debug($"TcpConnector Start Complete");
+
+                return true;
             }
             catch (Exception ex)
             {
                 Logger.Error($"Exception in TcpConnector.StartConnect() - {ex.Message} - {ex.StackTrace}", ex);
-                return;
+                return false;
             }
         }
 
@@ -225,7 +236,8 @@ namespace ServerEngine.Network.SystemLib
                 Logger.Error($"Exception in TcpConnector.Stop() - {ex.Message} - {ex.StackTrace}", ex);
             }
         }
-      
+        #endregion
+
         /// <summary>
         /// ListenInfo의 IPEndPoint에 대한 Connect 진행 요청 메서드 
         /// </summary>
@@ -307,8 +319,6 @@ namespace ServerEngine.Network.SystemLib
             Interlocked.Exchange(ref mSystemState, NetworkSystemState.StopCompleted);
         }
 
-        */
-
         private void OnConnectCompleted(object sender, SocketAsyncEventArgs e)
         {
             if (!AsyncCallbackChecker.CheckCallbackHandler_SocketError(e.SocketError))
@@ -347,6 +357,8 @@ namespace ServerEngine.Network.SystemLib
                 Stop();
             }
         }
+        */
+
 
         #region "ConnectBackup"
         /*public class TCPConnector : NetworkSystemBase

@@ -9,16 +9,14 @@ using ServerEngine.Config;
 
 namespace ServerEngine.Network.SystemLib
 {
-    public interface INetworkSystemBase
+    /*public interface INetworkSystemBase
     {
         void Initialize(ServerEngine.Network.Server.ServerModuleBase module, IConfigListen config_listen, ServerEngine.Config.ServerConfig serverInfo, ILogger logger, Func<ServerSession.Session> creater);
-
-        bool StartOnce();
 
         bool Start();
 
         void Stop();
 
         event EventHandler StopCallback;
-    }
+    }*/
 }
