@@ -7,6 +7,7 @@ using System.Net;
 
 using ServerEngine.Network.SystemLib;
 using ServerEngine.Network.ServerSession;
+using ServerEngine.Config;
 
 namespace ServerEngine.Network.Server
 {
@@ -18,20 +19,18 @@ namespace ServerEngine.Network.Server
     {
         string Name { get; }
 
-        public Log.ILogger Logger { get; }
+        public IPEndPoint? LocalEndPoint { get; }
 
-        IPEndPoint ipEndPoint { get; }
+        public NetworkSystemBase Acceptor { get; }
 
-        //void Initialize(List<IListenInfo> listenInfoList, IListenInfo listenInfo, Config.ServerConfig serverInfo, INetworkSystemBase networkSystem,  Logger logger, Func<Session> creater);
+        Log.ILogger Logger { get; }
 
-        //void InitializeSessionManager(ISessionManager sessionManager);
+        List<IConfigListen> config_listen_list { get; }
 
-        bool StartOnce();
+        int ServiceStartTime { get; }
 
         bool Start();
 
         void Stop();
-
-        bool ChangeState(int oldState, int newState);
     }
 }

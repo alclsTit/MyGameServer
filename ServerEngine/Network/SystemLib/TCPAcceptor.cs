@@ -15,7 +15,7 @@ using ServerEngine.Network.Server;
 namespace ServerEngine.Network.SystemLib
 {
     /// <summary>
-    /// TCP Socket을 이용한 Listen 및 Accept 관련 작업 클래스
+    /// TCP Socket을 이용한 Listen 및 Accept 관련 작업 클래스 (ServerModule 당 여러개 할당가능)
     /// </summary>
     public class TcpAcceptor : NetworkSystemBase
     {
@@ -38,6 +38,7 @@ namespace ServerEngine.Network.SystemLib
         private Thread mAcceptThread;
         private AutoResetEvent mThreadBlockEvent = new AutoResetEvent(false);
         private volatile int mAcceptCount = 0;
+        private volatile int mRunning = 0;
 
     #region property
         /// <summary>
@@ -46,12 +47,17 @@ namespace ServerEngine.Network.SystemLib
         public string Name { get; private set; }
 
         /// <summary>
+        /// accept run check flag
+        /// </summary>
+        public int Running => mRunning;
+
+        /// <summary>
         /// Get ListenSocket
         /// </summary>
         public TcpSocket? GetListenSocket => mListenSocket;
     #endregion
 
-        public TcpAcceptor(string name, Log.ILogger logger, ServerModuleBase module) 
+        public TcpAcceptor(string name, Log.ILogger logger, ServerModule module) 
             : base(logger, module)
         {
             Name = name;    
@@ -174,24 +180,44 @@ namespace ServerEngine.Network.SystemLib
                 if (null == mAcceptEventArgsPool)
                     throw new NullReferenceException(nameof(mAcceptEventArgsPool));
 
-                mThreadBlockEvent.WaitOne();
+                if (Logger.IsEnableDebug)
+                    Logger.Debug($"TcpAcceptor Accpet Start. address = {m_config_listen?.address}, port = {m_config_listen?.port}");
 
-                while (true == CheckMaxConnection())
+                while (1 == mRunning)
                 {
-                    // accept된 객체의 수가 현재 max_connection을 초과하게 되는 경우
-                    // 기존 connection이 disconnect 될 때까지 추가 connect를 받지 않고 대기
-                    Thread.Sleep(10);
+                    while (true == CheckMaxConnection())
+                    {
+                        // accept된 객체의 수가 현재 max_connection을 초과하게 되는 경우
+                        // 기존 connection이 disconnect 될 때까지 추가 connect를 받지 않고 대기
+                        Thread.Sleep(10);
+                    }
+
+                    mThreadBlockEvent.WaitOne();
+
+                    SocketAsyncEventArgs? accept_event_args = null;
+                    try
+                    {
+                        accept_event_args = mAcceptEventArgsPool.Get();
+
+                        var pending = mListenSocket?.GetSocket?.AcceptAsync(accept_event_args);
+                        if (false == pending)
+                            OnAcceptCompleteHandler(null, accept_event_args);
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Error($"Exception in TcpAcceptor.StartAccept() - {ex.Message} - {ex.StackTrace}", ex);
+                        if (null != accept_event_args)
+                            mAcceptEventArgsPool.Return(accept_event_args);
+                        mListenSocket?.DisconnectSocket();
+                    }
                 }
 
-                SocketAsyncEventArgs accept_event_args = mAcceptEventArgsPool.Get();
-
-                var pending = mListenSocket.GetSocket?.AcceptAsync(accept_event_args);
-                if (false == pending)
-                    OnAcceptCompleteHandler(null, accept_event_args);
+                Logger.Info($"Info in TcpAcceptor.StartAccept() - TcpAcceptor Accpet Function exit!!!");
             }
             catch (Exception ex)
             {
-                Logger.Error($"Exception in TcpAcceptor.StartAccept() - {ex.Message} - {ex.StackTrace}");
+                Logger.Error($"Exception in TcpAcceptor.StartAccept() - {ex.Message} - {ex.StackTrace}", ex);
+                mListenSocket?.DisconnectSocket();
                 return;
             }
         }
@@ -214,12 +240,13 @@ namespace ServerEngine.Network.SystemLib
                     return;
                 }
 
-                ServerModule.OnNewClientCreateHandler(e);
+                ServerModule.OnNewClientCreateHandler(e, false);
 
                 Interlocked.Increment(ref mAcceptCount);
 
                 mThreadBlockEvent.Set();
 
+                // Todo : 테스트 이후 제거 필요
                 if (Logger.IsEnableDebug)
                     Logger.Debug($"TcpAcceptor Accept Complete");
             }
@@ -232,7 +259,7 @@ namespace ServerEngine.Network.SystemLib
             }
             finally
             {
-                StartAccept();
+                //StartAccept();
             }
         }
 
@@ -256,6 +283,13 @@ namespace ServerEngine.Network.SystemLib
                 if (null == Interlocked.CompareExchange(ref mListenSocket, null, null) ||
                     true == mListenSocket?.IsNullSocket())
                 {
+                    return;
+                }
+
+                var old_running = mRunning;
+                if (old_running != Interlocked.CompareExchange(ref mRunning, 0, 1))
+                {
+                    Logger.Error($"Error in TcpAcceptor.Stop() - Fail to update running flag. current running = {old_running}");
                     return;
                 }
 

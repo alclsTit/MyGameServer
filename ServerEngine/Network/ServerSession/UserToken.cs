@@ -146,6 +146,7 @@ namespace ServerEngine.Network.ServerSession
             return true;
         }
 
+        #region public_method
         public virtual void StartSend(ArraySegment<byte> buffer)
         {
             if (null == buffer.Array) 
@@ -226,6 +227,11 @@ namespace ServerEngine.Network.ServerSession
             }
         }
 
+        public virtual void StartReceive()
+        {
+
+        }
+
         public virtual void OnRecvCompleteHandler(object? sender, SocketAsyncEventArgs e)
         {
             try
@@ -267,5 +273,6 @@ namespace ServerEngine.Network.ServerSession
 
             mDisposed = true;
         }
+        #endregion
     }
 }

@@ -50,6 +50,7 @@ namespace ServerEngine.Common
 
         private bool DefaultResetCallbackHandler(SocketAsyncEventArgs e)
         {
+            e.AcceptSocket = null;
             e.Completed -= new EventHandler<SocketAsyncEventArgs>(mHandler);
             e.UserToken = null;
             e.BufferList = null;

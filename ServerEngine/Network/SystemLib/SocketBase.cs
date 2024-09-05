@@ -9,6 +9,7 @@ using System.Threading;
 using ServerEngine.Log;
 using ServerEngine.Common;
 using ServerEngine.Config;
+using static ServerEngine.Network.SystemLib.SocketBase;
 
 namespace ServerEngine.Network.SystemLib
 {
@@ -27,9 +28,16 @@ namespace ServerEngine.Network.SystemLib
             CloseComplete = 32
         }
 
+        public enum eConnectState : int
+        {
+            NotConnected = 0,
+            Connected = 1
+        }
+
         protected Socket? mRawSocket;
         private object mLockObject = new object();
         private volatile int mState = (int)eSocketState.None;
+        private volatile int mConnected = 0;
 
         // protected int mSocketState = ServerState.NotInitialized;
 
@@ -59,6 +67,23 @@ namespace ServerEngine.Network.SystemLib
         {
             var origin = Interlocked.CompareExchange(ref mRawSocket, null, null);
             return null == origin ? true : false;
+        }
+
+        public bool SetConnect(eConnectState flag)
+        {
+            if (eConnectState.NotConnected != flag || eConnectState.Connected != flag)
+                return false;
+
+            int new_state = (int)flag;
+            var old_connected = mConnected;
+
+            return old_connected == Interlocked.Exchange(ref mConnected, new_state) ? true : false;
+        }
+
+        public bool IsConnected()
+        {
+            var old_connected = mConnected;
+            return old_connected == Interlocked.CompareExchange(ref mConnected, 1, 1) ? true : false;
         }
 
         public bool IsClosed()

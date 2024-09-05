@@ -37,7 +37,7 @@ namespace ServerEngine.Network.SystemLib
         /// <summary>
         /// 자신이 속한 서버모듈 
         /// </summary>
-        public ServerModuleBase ServerModule { get; protected set; }
+        public ServerModule ServerModule { get; protected set; }
 
         /// <summary>
         /// 서버 Listen 관련정보
@@ -76,7 +76,7 @@ namespace ServerEngine.Network.SystemLib
 
         //public bool IsConnected => mConnected == 1 ? true : false;
 
-        protected NetworkSystemBase(Log.ILogger logger, ServerModuleBase server_module)
+        protected NetworkSystemBase(Log.ILogger logger, ServerModule server_module)
         {
             this.Logger = logger;
             ServerModule = server_module;

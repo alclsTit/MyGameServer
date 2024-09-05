@@ -31,7 +31,7 @@ namespace ServerEngine.Network.SystemLib
         public IPEndPoint? GetRemoteEndPoint => mRemoteEndpoint;
         #endregion
 
-        public TcpConnector(string name, Log.ILogger logger, ServerModuleBase module)
+        public TcpConnector(string name, Log.ILogger logger, ServerModule module)
             : base(logger, module)
         {
             Name = name;
@@ -173,6 +173,8 @@ namespace ServerEngine.Network.SystemLib
                     Logger.Error($"Error in TcpConnector.OnConnectCompleteHandler() - UserToken is null");
                     return;
                 }
+
+                ServerModule.OnNewClientCreateHandler(e, true);
 
                 /*if (e.UserToken?.GetType() == typeof(ClientUserToken))
                 {

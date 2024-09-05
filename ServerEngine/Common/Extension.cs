@@ -25,10 +25,10 @@ namespace ServerEngine.Common
         }
 
         #region TimeExtension
-        public static double ToUnixTime(this DateTime cur_datetime)
+        public static int ToUnixTime(this DateTime cur_datetime)
         {
             TimeSpan interval = cur_datetime - DateTime.UnixEpoch;
-            return interval.TotalSeconds;
+            return (int)interval.TotalSeconds;
         }
 
         #endregion
