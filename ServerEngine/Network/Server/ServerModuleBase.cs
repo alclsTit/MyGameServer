@@ -14,6 +14,7 @@ using ServerEngine.Network.ServerSession;
 using ServerEngine.Config;
 using System.Collections.Frozen;
 using Microsoft.Extensions.ObjectPool;
+using System.Diagnostics.CodeAnalysis;
 
 namespace ServerEngine.Network.Server
 {
@@ -75,8 +76,7 @@ namespace ServerEngine.Network.Server
         /// 모든 리슨정보
         /// </summary>
         public List<IConfigListen> config_listen_list { get; private set; }
-
-     
+ 
         /// <summary>
         /// 각각의 서버모듈이 작동하기 시작한 시작시간 (utc+0)
         /// </summary>
@@ -87,7 +87,9 @@ namespace ServerEngine.Network.Server
         /// </summary>
         public DateTime mLastActiveTime { get; protected set; }
 
-    #region property
+        #region property
+        private Dictionary<UIDGenerator.eGenerateType, UIDGenerator> mUidGenerators;
+
         /// <summary>
         /// server_module name
         /// </summary>
@@ -148,6 +150,9 @@ namespace ServerEngine.Network.Server
 
             // Client에서 접속해서 생성된 UserToken 관리
             ClientUserTokenManager = new ClientUserTokenManager(logger, config.config_network);
+
+            // Create UidGenerator
+            mUidGenerators = new Dictionary<UIDGenerator.eGenerateType, UIDGenerator>();
         }
 
         public bool UpdateState(eServerState state)
@@ -170,12 +175,25 @@ namespace ServerEngine.Network.Server
             
             mLocalEndPoint = ServerHostFinder.GetServerIPAddress(config_listen.port);
 
+            // Todo: db에서 
+
             var old_state = (eServerState)mState;
             var new_state = eServerState.Initialized;
             if (false == UpdateState(new_state))
             {
                 Logger.Error($"Error in ServerModuleBase.Initialize() - Fail to Update State [{old_state}] -> [{new_state}]");
                 return false;
+            }
+
+            return true;
+        }
+
+        public virtual bool InitializeUidGenerators(int server_gid, int server_index, int max_connection)
+        {
+            for (int i = 1; i < (int)UIDGenerator.eGenerateType.Max; ++i)
+            {
+                UIDGenerator.eGenerateType type = (UIDGenerator.eGenerateType)i;
+                mUidGenerators.Add(type, new UIDGenerator(type, server_gid, server_index, max_connection));
             }
 
             return true;
@@ -293,10 +311,17 @@ namespace ServerEngine.Network.Server
                     return;
                 }
 
-                var client_token = mClientUserTokenPool.Get();
-                client_token.Initialize(Logger, Config.config_network, new TcpSocket(e.ConnectSocket, Logger), UserToken.eTokenType.Client, mSendEventArgsPool.Get(), mRecvEventArgsPool.Get());
+                bool get_token = TryGetUid(UIDGenerator.eGenerateType.UserToken, out var token_id);
+                if (false == get_token)
+                {
+                    Logger.Error($"Error in TcpAcceptor.OnNewClientCreateHandler() - Fail to Get ClientUserTokenId");
+                    return;
+                }
 
-                ClientUserTokenManager.TryAddUserToken();
+                var client_token = mClientUserTokenPool.Get();
+                client_token.Initialize(Logger, Config.config_network, new TcpSocket(e.ConnectSocket, Logger), mSendEventArgsPool.Get(), mRecvEventArgsPool.Get(), token_id);
+
+                ClientUserTokenManager.TryAddUserToken(token_id, client_token);
 
             }
             else
@@ -397,6 +422,20 @@ namespace ServerEngine.Network.Server
             var ipEndPoint = (IPEndPoint)endPoint;
             var listenInfo = mListenInfoList.Find((item) => { return item.port == ipEndPoint.Port; });
             return listenInfo != null ? Name : default(string);    
+        }
+
+        public bool TryGetUid(UIDGenerator.eGenerateType type, out long uid)
+        {
+            if (mUidGenerators.TryGetValue(type, out var generator))
+            {
+                uid = generator.GetInt64();
+                return true;
+            }
+            else
+            {
+                uid = 0;
+                return false;
+            }
         }
 
     }

@@ -17,7 +17,8 @@ namespace ServerEngine.Common
         public enum eGenerateType
         {
             None = 0,
-            Max = 1
+            UserToken = 1,
+            Max = 2
         }
 
         private int mServerGid;
@@ -38,9 +39,9 @@ namespace ServerEngine.Common
             mLoopLimitLength = loop_limit.ToString().Length;
         }
 
-        public string Get()
+        public string GetString()
         {
-            int loop_count = Interlocked.Increment(ref mLoopCount) / mLoopLimit;
+            int loop_count = Interlocked.Increment(ref mLoopCount) % mLoopLimit;
             int uid_loop_count = loop_count.ToString("D").Length + (mLoopLimitLength - loop_count.ToString().Length);
 
             var create_time = DateTime.UtcNow.ToUnixTime();
@@ -48,6 +49,11 @@ namespace ServerEngine.Common
             // ex) 2011 11 10 1724863307 0001 (22자리)
             var uid = $"{mServerGid}{mServerIndex}{(int)mGenerateType}{create_time}{uid_loop_count}";
             return uid;
+        }
+
+        public long GetInt64()
+        {
+            return long.Parse(GetString());
         }
     }
 }

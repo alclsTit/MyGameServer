@@ -15,6 +15,7 @@ using ServerEngine.Log;
 using ServerEngine.Network.Message;
 using ServerEngine.Network.SystemLib;
 using ServerEngine.Common;
+using System.Net.Http.Headers;
 
 namespace ServerEngine.Network.ServerSession
 {
@@ -108,31 +109,26 @@ namespace ServerEngine.Network.ServerSession
         private volatile bool mConnected = false;
 
         #region property
-        public long mUid = 0;
+        public long mTokenId { get; protected set; } = 0;
         public bool Connected => mConnected;
-        public bool IsClientConnect { get; protected set; } = false;
         public eTokenType TokenType { get; protected set; } = eTokenType.None;
 
-        protected Channel<ArraySegment<byte>> SendQueue { get; private set; }
+        protected Channel<ArraySegment<byte>>? SendQueue { get; private set; }
         public SocketBase Socket { get; protected set; }
         public Log.ILogger Logger { get; private set; }
 
-        public SocketAsyncEventArgs SendAsyncEvent { get; private set; }
-        public SocketAsyncEventArgs RecvAsyncEvent { get; private set; }
-        public MessageProcessor MessageHandler { get; private set; }
+        public SocketAsyncEventArgs? SendAsyncEvent { get; private set; }
+        public SocketAsyncEventArgs? RecvAsyncEvent { get; private set; }
+        public MessageProcessor? MessageHandler { get; private set; }
 
         public IPEndPoint? GetLocalEndPoint => mLocalEndPoint;
         public IPEndPoint? GetRemoteEndPoint => mRemoteEndPoint;
         #endregion
 
-        protected UserToken() { }
-
-        public virtual bool Initialize(Log.ILogger logger, IConfigNetwork config_network, SocketBase socket, eTokenType type, SocketAsyncEventArgs send_event_args, SocketAsyncEventArgs recv_event_args)
+        protected bool InitializeBase(Log.ILogger logger, IConfigNetwork config_network, SocketBase socket, SocketAsyncEventArgs send_event_args, SocketAsyncEventArgs recv_event_args)
         {
             this.Socket = socket;
             this.Logger = logger;
-
-            TokenType = type;
 
             mLocalEndPoint = (IPEndPoint?)socket.GetSocket?.LocalEndPoint;
             mRemoteEndPoint = (IPEndPoint?)socket.GetSocket?.RemoteEndPoint;
@@ -155,6 +151,9 @@ namespace ServerEngine.Network.ServerSession
             if (null == buffer.Array) 
                 throw new ArgumentNullException(nameof(buffer));
 
+            if (null == SendQueue)
+                throw new NullReferenceException(nameof(SendQueue));
+
             if (false == Socket.UpdateState(SocketBase.eSocketState.Sending))
             {
                 if (Logger.IsEnableDebug)
@@ -170,6 +169,9 @@ namespace ServerEngine.Network.ServerSession
             if (null == buffer.Array) 
                 throw new ArgumentNullException(nameof(buffer));
 
+            if (null == SendQueue)
+                throw new NullReferenceException(nameof(SendQueue));
+
             if (false == Socket.UpdateState(SocketBase.eSocketState.Sending))
             {
                 if (Logger.IsEnableDebug)
@@ -182,6 +184,12 @@ namespace ServerEngine.Network.ServerSession
         public virtual async ValueTask SendAsync()
         {
             if (false == Connected)
+                return;
+
+            if (null == SendQueue)
+                return;
+
+            if (null == SendAsyncEvent)
                 return;
 
             SendQueue.Writer.Complete();
@@ -244,11 +252,10 @@ namespace ServerEngine.Network.ServerSession
                 return;
 
             Socket.Dispose();
-            SendAsyncEvent.Dispose();
-            RecvAsyncEvent.Dispose();
+            SendAsyncEvent?.Dispose();
+            RecvAsyncEvent?.Dispose();
 
             mConnected = false;
-            IsClientConnect = false;
             TokenType = eTokenType.None;
 
             // Todo : SendQueue에 보내야할 데이터가 남아있을 때 처리작업 필요

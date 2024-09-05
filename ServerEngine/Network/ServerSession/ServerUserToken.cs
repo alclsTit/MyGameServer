@@ -6,6 +6,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
+using System.Net.Sockets;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -36,15 +37,35 @@ namespace ServerEngine.Network.ServerSession
 
     public class ServerUserToken : UserToken
     {
-        private IPEndPoint? mLocalEndPoint;
-        private IPEndPoint? mRemoteEndPoint;
+        public ServerUserToken() : base() { }
 
-        public ServerUserToken(SocketBase socket, bool client_connect = false)
-            : base(socket)
+        public bool Initialize(Log.ILogger logger, IConfigNetwork config_network, SocketBase socket, SocketAsyncEventArgs send_event_args, SocketAsyncEventArgs recv_event_args)
         {
-            IsClientConnect = client_connect;
+            if (null == logger)
+                throw new ArgumentNullException(nameof(logger));
 
+            if (null == config_network)
+                throw new ArgumentNullException(nameof(config_network));
 
+            if (null == socket)
+                throw new ArgumentNullException(nameof(socket));
+
+            if (null == send_event_args)
+                throw new ArgumentNullException(nameof(send_event_args));
+
+            if (null == recv_event_args)
+                throw new ArgumentNullException(nameof(recv_event_args));
+
+            if (false == base.InitializeBase(logger, config_network, socket, send_event_args, recv_event_args))
+            {
+                Logger.Error($"Error in ServerUserToken.Initialize() - Fail to Initialize");
+                return false;
+            }
+
+            base.TokenType = eTokenType.Server;
+
+            return true;
         }
+                
     }
 }

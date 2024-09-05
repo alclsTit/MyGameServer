@@ -1,10 +1,12 @@
-﻿using ServerEngine.Config;
+﻿using ServerEngine.Common;
+using ServerEngine.Config;
 using ServerEngine.Network.SystemLib;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
+using System.Net.Sockets;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -80,9 +82,38 @@ namespace ServerEngine.Network.ServerSession
 
     public class ClientUserToken : UserToken
     {
-        public ClientUserToken() : base()
+        public ClientUserToken() : base() { }
+
+        public bool Initialize(Log.ILogger logger, IConfigNetwork config_network, SocketBase socket, SocketAsyncEventArgs send_event_args, SocketAsyncEventArgs recv_event_args, long token_id)
         {
-            IsClientConnect = true;
+            if (null == logger)
+                throw new ArgumentNullException(nameof(logger));
+
+            if (null == config_network)
+                throw new ArgumentNullException(nameof(config_network));
+
+            if (null == socket)
+                throw new ArgumentNullException(nameof(socket));
+
+            if (null == send_event_args)
+                throw new ArgumentNullException(nameof(send_event_args));
+
+            if (null == recv_event_args)
+                throw new ArgumentNullException(nameof(recv_event_args));
+
+            if (0 >= token_id)
+                throw new ArgumentNullException(nameof(token_id));
+
+            if (false == base.InitializeBase(logger, config_network, socket, send_event_args, recv_event_args))
+            {
+                Logger.Error($"Error in ClientUserToken.Initialize() - Fail to Initialize");
+                return false;
+            }
+
+            base.TokenType = eTokenType.Client;
+            base.mTokenId = token_id;
+
+            return true;
         }
     }
 }
