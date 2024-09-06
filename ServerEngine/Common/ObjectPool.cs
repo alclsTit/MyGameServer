@@ -2,6 +2,7 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Security.Permissions;
 using System.Text;
 using System.Threading.Tasks;
@@ -9,13 +10,42 @@ using Microsoft.Extensions.ObjectPool;
 
 namespace ServerEngine.Common
 {
+    public class NonDisposableObjectPool<T> : DefaultObjectPool<T> where T : class, new()
+    {
+        private volatile int m_count = 0;
+        private int m_capacity = 0;
+
+        public int Count => m_count;
+        public int Capacity => m_capacity;
+
+        public NonDisposableObjectPool(IPooledObjectPolicy<T> policy, int maxiumRetained) : base(policy, maxiumRetained)
+        {
+            m_capacity = maxiumRetained;
+        }
+
+        public new T Get()
+        {
+            var item = base.Get();
+            
+            Interlocked.Increment(ref m_count);
+            return item;
+        }
+
+        public new void Return(T obj)
+        {
+            Interlocked.Decrement(ref m_count);
+
+            base.Return(obj);
+        }
+    }
+
     public class DisposableObjectPool<T> : DefaultObjectPool<T>, IDisposable where T : class, IDisposable
     {
         private ConcurrentBag<T> m_pools;
         private bool m_disposed = false;
 
-        public volatile int m_count = 0;
-        public int m_capacity = 0;
+        private volatile int m_count = 0;
+        private int m_capacity = 0;
 
         // thread-safe (volatile read)
         public int Count => m_count;
