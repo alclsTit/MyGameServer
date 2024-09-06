@@ -62,10 +62,12 @@ namespace ServerEngine.Config
     }
     public interface IPool
     {
+        public string name { get; }
         public List<IConfigPool> list { get; }
     }
     public class DefaultPool : IPool
     {
+        public string name { get; }
         public List<IConfigPool> list { get; }
         public DefaultPool(List<IConfigPool> list)
         {

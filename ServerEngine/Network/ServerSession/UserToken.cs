@@ -14,8 +14,8 @@ using ServerEngine.Config;
 using ServerEngine.Log;
 using ServerEngine.Network.Message;
 using ServerEngine.Network.SystemLib;
-using ServerEngine.Common;
 using System.Net.Http.Headers;
+using System.Diagnostics.CodeAnalysis;
 
 namespace ServerEngine.Network.ServerSession
 {
@@ -227,9 +227,46 @@ namespace ServerEngine.Network.ServerSession
             }
         }
 
-        public virtual void StartReceive()
+        public virtual void StartReceive(RecvStream stream)
         {
+            if (false == Socket.IsNullSocket())
+            {
+                Logger.Error($"Error in UserToken.StartReceive() - Socket is null");
+                return;
+            }
 
+            if (false == Socket.IsConnected())
+            {
+                Logger.Error($"Error in UserToken.StartReceive() - Socket is not connected");
+                return;
+            }
+
+            if (null == RecvAsyncEvent)
+            {
+                Logger.Error($"Error in UserToken.StartReceive() - RecvAsyncEvent is null");
+                return;
+            }
+
+            if (false == Socket.UpdateState(SocketBase.eSocketState.Recving))
+            {
+                Logger.Error($"Error in UserToken.StartReceive() - Fail to update recv state [recving]");
+                return;
+            }
+
+            try
+            {
+                var buffer = stream.Buffer;
+                RecvAsyncEvent.SetBuffer(buffer: buffer.Array, offset: buffer.Offset, count: buffer.Count);
+
+                var pending = Socket.GetSocket?.ReceiveAsync(e: RecvAsyncEvent);
+                if (false == pending)
+                    OnRecvCompleteHandler(null, e: RecvAsyncEvent);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Exception in UserToken.StartReceive() - {ex.Message} - {ex.StackTrace}");
+                return;
+            }
         }
 
         public virtual void OnRecvCompleteHandler(object? sender, SocketAsyncEventArgs e)
@@ -243,6 +280,18 @@ namespace ServerEngine.Network.ServerSession
                 {
                     Logger.Error($"Error in UserToken.OnRecvCompleteHandler() - SocketError = {socket_error}, BytesTransferred = {bytes_transferred}");
                     return;
+                }
+
+                Socket.RemoveState(SocketBase.eSocketState.Recving);
+
+                try
+                {
+
+                }
+                catch (Exception)
+                {
+
+                    throw;
                 }
             }
             catch (Exception ex)

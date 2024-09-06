@@ -29,8 +29,7 @@ namespace ServerEngine.Network.Message
         /// <summary>
         /// 현재 데이터의 유효범위 (유효범위 = 전체 쓰여진 데이터 - 현재까지 읽은 데이터)
         /// </summary>
-        public ArraySegment<byte> GetReadMessage => new ArraySegment<byte>(mRecvBuffer.Array, mRecvBuffer.Offset + mNumOfRead, GetDataSize);
-
+        public ArraySegment<byte> GetReadMessage() => new ArraySegment<byte>(mRecvBuffer.Array, mRecvBuffer.Offset + mNumOfRead, GetDataSize);
         /// <summary>
         /// 메시지를 쓸 수 있는 잔여공간
         /// </summary>
@@ -38,9 +37,9 @@ namespace ServerEngine.Network.Message
 
         //[*][*][*][*][*][]
         //->[][][][][]
-        public MessageProcessor(int bufferSize)
+        public MessageProcessor(int buffer_size)
         {
-            mRecvBuffer = new ArraySegment<byte>(new byte[bufferSize]);
+            mRecvBuffer = new ArraySegment<byte>(new byte[buffer_size]);
         }
 
         public bool OnReadMessage(int numOfBytes)

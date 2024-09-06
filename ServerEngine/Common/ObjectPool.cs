@@ -10,15 +10,19 @@ using Microsoft.Extensions.ObjectPool;
 
 namespace ServerEngine.Common
 {
-    public class NonDisposableObjectPool<T> : DefaultObjectPool<T> where T : class, new()
+    #region ObjectPool - GC Target Object
+    public class NonDisposableObjectPool<T> : DefaultObjectPool<T> where T : class
     {
         private volatile int m_count = 0;
         private int m_capacity = 0;
 
+        #region property
         public int Count => m_count;
         public int Capacity => m_capacity;
+        #endregion
 
-        public NonDisposableObjectPool(IPooledObjectPolicy<T> policy, int maxiumRetained) : base(policy, maxiumRetained)
+        public NonDisposableObjectPool(IPooledObjectPolicy<T> policy, int maxiumRetained) 
+            : base(policy, maxiumRetained)
         {
             m_capacity = maxiumRetained;
         }
@@ -38,7 +42,9 @@ namespace ServerEngine.Common
             base.Return(obj);
         }
     }
+    #endregion
 
+    #region ObjectPool - GC Non-Target Object
     public class DisposableObjectPool<T> : DefaultObjectPool<T>, IDisposable where T : class, IDisposable
     {
         private ConcurrentBag<T> m_pools;
@@ -47,11 +53,14 @@ namespace ServerEngine.Common
         private volatile int m_count = 0;
         private int m_capacity = 0;
 
+        #region property
         // thread-safe (volatile read)
         public int Count => m_count;
         public int Capacity => m_capacity;
+        #endregion
 
-        public DisposableObjectPool(IPooledObjectPolicy<T> policy, int maximumRetained) : base(policy, maximumRetained) 
+        public DisposableObjectPool(IPooledObjectPolicy<T> policy, int maximumRetained) 
+            : base(policy, maximumRetained) 
         {
             m_pools = new ConcurrentBag<T>();
             m_capacity = maximumRetained;
@@ -87,6 +96,7 @@ namespace ServerEngine.Common
             m_disposed = true;
         }
     }
+    #endregion
 
 
     /// <summary>

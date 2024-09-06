@@ -42,5 +42,10 @@ namespace ServerEngine.Common
 
             return string.Empty;
         }
+
+        public static readonly int MAX_POOL_DEFAULT_SIZE_COMMON = 1024;             // 1KB
+        public static readonly int MAX_SEND_BUFFER_SIZE_COMMON = 1024 * 1024 * 4;   // 4MB
+        public static readonly int MAX_RECV_BUFFER_SIZE_COMMON = 1024 * 1024 * 4;   // 4MB
+
     }
 }

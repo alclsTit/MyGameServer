@@ -52,10 +52,6 @@ namespace ServerEngine.Network.Server
             Max = 6
         }
 
-        /// <summary>
-        /// server_module endpoint
-        /// </summary>
-        public IPEndPoint? LocalEndPoint { get; private set; }
 
         /// <summary>
         /// server_module state
@@ -67,6 +63,8 @@ namespace ServerEngine.Network.Server
         /// </summary>
         protected DisposableObjectPool<SocketAsyncEventArgs> mSendEventArgsPool, mRecvEventArgsPool;
         private DisposableObjectPool<ClientUserToken> mClientUserTokenPool;
+        private RecvStreamPool mRecvStreamPool;
+        private SendStreamPool mSendStreamPool;
 
         #region "2022.05.04 기존 커스텀 ObjectPool -> Microsoft.Extensions.ObjectPool로 변경에 따른 코드 주석처리"
         /*
@@ -81,6 +79,11 @@ namespace ServerEngine.Network.Server
         private Dictionary<UIDGenerator.eGenerateType, UIDGenerator> mUidGenerators;
 
     #region property
+        /// <summary>
+        /// server_module endpoint
+        /// </summary>
+        public IPEndPoint? LocalEndPoint { get; private set; }
+
         /// <summary>
         /// 서버모듈이 가지고 있는 Accept / Connect 객체 (1:1 관계)
         /// </summary>
@@ -134,21 +137,45 @@ namespace ServerEngine.Network.Server
             // Microsoft.Extensions.ObjectPool 사용
             // ObjectPool에서 관리하는 최대 풀 객체 수 세팅
             int maximum_retained = 0;
-            var pool_default_size = config.config_etc.pools.list.FirstOrDefault(e => e.name.ToLower().Trim() == name.ToLower().Trim())?.default_size;
-            
-            foreach(var item in config.config_network.config_listen_list)
-                maximum_retained += item.max_connection;
+            int? pool_default_size = 0;
+            if (!config.config_etc.pools.name.Equals(name, StringComparison.OrdinalIgnoreCase)) 
+                throw new ArgumentException(nameof(name));
 
-            maximum_retained = true == pool_default_size.HasValue ? pool_default_size.Value : maximum_retained;
+            // Set SocketAsyncEventArgs ObjectPool
+            {
+                string target = "socketasynceventargs";
+                pool_default_size = config.config_etc.pools.list.FirstOrDefault(e => e.name.Equals(target, StringComparison.OrdinalIgnoreCase))?.default_size;
 
-            if (Logger.IsEnableDebug)
-                Logger.Debug($"Debug in ServerModuleBase() - SocketAsyncEventArgs ObjectPool Size = {maximum_retained}");
+                foreach(var item in config.config_network.config_listen_list)
+                    maximum_retained += item.max_connection;
+
+                maximum_retained = true == pool_default_size.HasValue ? pool_default_size.Value : maximum_retained;
+
+                if (Logger.IsEnableDebug)
+                    Logger.Debug($"Debug in ServerModuleBase() - SocketAsyncEventArgs ObjectPool Size = {maximum_retained}");
+            }
 
             // ObjectPool 객체에 callback handler만 선제적으로 등록
             mSendEventArgsPool = new DisposableObjectPool<SocketAsyncEventArgs>(new SocketEventArgsObjectPoolPolicy(handler), maximum_retained);
             mRecvEventArgsPool = new DisposableObjectPool<SocketAsyncEventArgs>(new SocketEventArgsObjectPoolPolicy(handler), maximum_retained);
 
             mClientUserTokenPool = new DisposableObjectPool<ClientUserToken>(new DefaultPooledObjectPolicy<ClientUserToken>(), maximum_retained);
+
+            // Set SendStream ObjectPool
+            {
+                string target = "sendstream";
+                pool_default_size = config.config_etc.pools.list.FirstOrDefault(e => e.name.Equals(target, StringComparison.OrdinalIgnoreCase))?.default_size;
+
+                mSendStreamPool = new SendStreamPool(config.config_network.max_io_thread_count / 2, pool_default_size ?? Utility.MAX_POOL_DEFAULT_SIZE_COMMON, config.config_network.config_socket.send_buff_size);
+            }
+
+            // Set RecvStream ObjectPool
+            {
+                string target = "recvstream";
+                pool_default_size = config.config_etc.pools.list.FirstOrDefault(e => e.name.Equals(target, StringComparison.OrdinalIgnoreCase))?.default_size;
+
+                mRecvStreamPool = new RecvStreamPool(config.config_network.max_io_thread_count / 2, pool_default_size ?? Utility.MAX_POOL_DEFAULT_SIZE_COMMON, config.config_network.config_socket.recv_buff_size);
+            }
 
             // Client에서 접속해서 생성된 UserToken 관리
             ClientUserTokenManager = new ClientUserTokenManager(logger, config.config_network);
@@ -299,15 +326,22 @@ namespace ServerEngine.Network.Server
                     // usertoken processing
                     var client_token = mClientUserTokenPool.Get();
 
-                    var socket_wrapper = new TcpSocket(new_socket, Logger);
-                    socket_wrapper.SetSocketOption(config_network: Config.config_network);
-                    socket_wrapper.SetConnect(SocketBase.eConnectState.Connected);
+                    var socket = new TcpSocket(new_socket, Logger);
+                    socket.SetSocketOption(config_network: Config.config_network);
+                    socket.SetConnect(SocketBase.eConnectState.Connected);
 
-                    client_token.Initialize(Logger, Config.config_network, socket_wrapper, mSendEventArgsPool.Get(), mRecvEventArgsPool.Get(), token_id);
+                    client_token.Initialize(Logger, Config.config_network, socket, mSendEventArgsPool.Get(), mRecvEventArgsPool.Get(), token_id);
 
                     ClientUserTokenManager.TryAddUserToken(token_id, client_token);
 
                     // receive
+                    var recv_stream = mRecvStreamPool.Get();
+                    if (null == recv_stream)
+                    {
+                        recv_stream = new RecvStream(Config.config_network.config_socket.recv_buff_size);
+                        Logger.Warn($"Warning in ServerModule.OnNewClientCreateHandler() - RecvStream is created by new allocator");
+                    }
+                    client_token.StartReceive(recv_stream);
                     
                 }
                 catch (Exception ex) 
