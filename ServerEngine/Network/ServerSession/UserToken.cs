@@ -100,19 +100,19 @@ namespace ServerEngine.Network.ServerSession
 
         #region property
         public long mTokenId { get; protected set; } = 0;
-        public bool Connected => mConnected;
         public eTokenType TokenType { get; protected set; } = eTokenType.None;
 
         protected Channel<ArraySegment<byte>>? SendQueue { get; private set; }
         public SocketBase Socket { get; protected set; }
         public Log.ILogger Logger { get; private set; }
 
-        public SocketAsyncEventArgs? SendAsyncEvent { get; private set; }
-        public SocketAsyncEventArgs? RecvAsyncEvent { get; private set; }
-        public RecvMessageHandler? RecvMessageHandler { get; private set; }
+        public SocketAsyncEventArgs? SendAsyncEvent { get; private set; }           // retrieve target
+        public SocketAsyncEventArgs? RecvAsyncEvent { get; private set; }           // retrieve target
+        public RecvMessageHandler? RecvMessageHandler { get; private set; }         // retrieve target
 
         public IPEndPoint? GetLocalEndPoint => mLocalEndPoint;
         public IPEndPoint? GetRemoteEndPoint => mRemoteEndPoint;
+        public bool Connected => mConnected;
         #endregion
 
         protected bool InitializeBase(Log.ILogger logger, IConfigNetwork config_network, SocketBase socket, SocketAsyncEventArgs send_event_args, SocketAsyncEventArgs recv_event_args, RecvStream recv_stream)
@@ -291,6 +291,7 @@ namespace ServerEngine.Network.ServerSession
             {
                 if (false == RecvMessageHandler.WriteMessage(bytes_transferred))
                 {
+                    Logger.Error($"Error in UserToken.OnRecvCompleteHandler() - Buffer Write Error");
                     return;
                 }
 
@@ -310,13 +311,14 @@ namespace ServerEngine.Network.ServerSession
                 if (false == process_length.HasValue || 
                     0 > process_length || RecvMessageHandler?.GetHaveToReadSize < process_length)
                 {
-                    Logger.Error($"Error in UserToken.OnRecvCompleteHandler() - read bytes = {process_length}");
+                    Logger.Error($"Error in UserToken.OnRecvCompleteHandler() - Buffer Processing Error. Read bytes = {process_length}");
                     return; 
                 }
 
 
                 if (false == RecvMessageHandler?.ReadMessage(process_length.Value))
                 {
+                    Logger.Error($"Error in UserToken.OnRecvCompleteHandler() - Buffer Read Error");
                     return;
                 }
 
@@ -330,14 +332,64 @@ namespace ServerEngine.Network.ServerSession
             }
         }
 
-        public virtual void Dispose()
+        public virtual void ProcessEnd(bool force_close)
+        {
+            try
+            {
+                // 1. null socket check (null > exit)
+                // 2. socket close check (closed or closing > exit)
+                // 3. socket connect check (false > exit)
+                if (true == Socket.IsNullSocket() || 
+                    true == Socket.IsClosed() || 
+                    false == Socket.IsConnected())
+                {
+                    return;
+                }
+
+                var socket_state = SocketBase.eSocketState.Closing;
+                if (false == Socket.UpdateState(SocketBase.eSocketState.Closing))
+                {
+                    Logger.Error($"Error in UserToken.ProcessEnd() - Fail to update socket state {socket_state}. token_id = {mTokenId}, token_type = {TokenType}");
+                    return;
+                }
+
+                // connected && not closing, close complete
+                bool sending = Socket.CheckState(SocketBase.eSocketState.Sending);
+                bool recving = Socket.CheckState(SocketBase.eSocketState.Recving);
+
+                if (sending && recving)
+                {
+                    // socket sending and recving
+                    // Todo : SendQueue에 보내야할 데이터가 남아있을 때 처리작업 필요
+                   
+
+                }
+                else if (sending)
+                {
+                    // socket sending
+                }
+                else if (recving)
+                {
+                    // socket recving
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Exception in UserToken.ProcessEnd() - {ex.Message} - {ex.StackTrace}");
+                return;
+            }
+        }
+
+        public virtual void Dispose(Func<SocketAsyncEventArgs?, SocketAsyncEventArgs?, bool> retrieve_event)
         {
             if (mDisposed)
                 return;
 
-            Socket.Dispose();
-            SendAsyncEvent?.Dispose();
-            RecvAsyncEvent?.Dispose();
+            Socket.DisconnectSocket();
+            retrieve_event(SendAsyncEvent, RecvAsyncEvent);
+            
+            //SendAsyncEvent?.Dispose();
+            //RecvAsyncEvent?.Dispose();
 
             mConnected = false;
             TokenType = eTokenType.None;

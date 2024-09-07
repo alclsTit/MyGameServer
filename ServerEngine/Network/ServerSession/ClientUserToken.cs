@@ -64,6 +64,14 @@ namespace ServerEngine.Network.ServerSession
             return UserTokens.TryAdd(uid, token);
         }
 
+        public bool TryRemoveToken(long uid, Func<SocketAsyncEventArgs?, SocketAsyncEventArgs?, bool> retrieve_event)
+        {
+            if (UserTokens.TryGetValue(uid, out var token))
+            {
+                token.Dispose(retrieve_event);
+            }
+        }
+
         public async ValueTask Run(int index)
         {
             if (0 > index || base.m_config_network.max_io_thread_count <= index)

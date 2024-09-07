@@ -181,8 +181,7 @@ namespace ServerEngine.Network.SystemLib
                         if (mRawSocket.Connected)
                             mRawSocket.Shutdown(shutdown_option);
 
-                        mRawSocket.Close();
-                        mRawSocket = null;
+                        mRawSocket.Dispose();
 
                         UpdateState(eSocketState.CloseComplete);
                     }

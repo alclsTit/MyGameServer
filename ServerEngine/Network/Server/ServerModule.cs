@@ -378,6 +378,17 @@ namespace ServerEngine.Network.Server
             }
         }
 
+        public bool OnCloseHandler(SocketAsyncEventArgs? send_event_args, SocketAsyncEventArgs? recv_event_args)
+        {
+            if (null != send_event_args)
+                mSendEventArgsPool.Return(send_event_args);
+
+            if (null != recv_event_args)
+                mRecvEventArgsPool.Return(recv_event_args);
+
+            return true;
+        }
+
         /*public virtual Session NewClientSessionCreate(string sessionID, SocketAsyncEventArgs e, Logger logger, Func<Session> creater, bool isClient)
         {
             if (e.LastOperation != SocketAsyncOperation.Accept && 
