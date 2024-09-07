@@ -330,10 +330,6 @@ namespace ServerEngine.Network.Server
                     socket.SetSocketOption(config_network: Config.config_network);
                     socket.SetConnect(SocketBase.eConnectState.Connected);
 
-                    client_token.Initialize(Logger, Config.config_network, socket, mSendEventArgsPool.Get(), mRecvEventArgsPool.Get(), token_id);
-
-                    ClientUserTokenManager.TryAddUserToken(token_id, client_token);
-
                     // receive
                     var recv_stream = mRecvStreamPool.Get();
                     if (null == recv_stream)
@@ -341,7 +337,11 @@ namespace ServerEngine.Network.Server
                         recv_stream = new RecvStream(Config.config_network.config_socket.recv_buff_size);
                         Logger.Warn($"Warning in ServerModule.OnNewClientCreateHandler() - RecvStream is created by new allocator");
                     }
-                    client_token.StartReceive(recv_stream);
+                    client_token.Initialize(Logger, Config.config_network, socket, mSendEventArgsPool.Get(), mRecvEventArgsPool.Get(), recv_stream, token_id);
+
+                    ClientUserTokenManager.TryAddUserToken(token_id, client_token);
+
+                    client_token.StartReceive(/*recv_stream*/);
                     
                 }
                 catch (Exception ex) 

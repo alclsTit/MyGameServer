@@ -6,6 +6,8 @@ using System.Threading.Tasks;
 
 namespace ServerEngine.Network.Message
 {
+
+
     /// <summary>
     /// Recv 수신버퍼
     /// * Session 당 한개씩 배정

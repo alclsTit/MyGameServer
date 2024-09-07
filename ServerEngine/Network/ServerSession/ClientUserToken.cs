@@ -1,5 +1,6 @@
 ﻿using ServerEngine.Common;
 using ServerEngine.Config;
+using ServerEngine.Network.Message;
 using ServerEngine.Network.SystemLib;
 using System;
 using System.Collections.Concurrent;
@@ -84,7 +85,7 @@ namespace ServerEngine.Network.ServerSession
     {
         public ClientUserToken() : base() { }
 
-        public bool Initialize(Log.ILogger logger, IConfigNetwork config_network, SocketBase socket, SocketAsyncEventArgs send_event_args, SocketAsyncEventArgs recv_event_args, long token_id)
+        public bool Initialize(Log.ILogger logger, IConfigNetwork config_network, SocketBase socket, SocketAsyncEventArgs send_event_args, SocketAsyncEventArgs recv_event_args, RecvStream recv_stream, long token_id)
         {
             if (null == logger)
                 throw new ArgumentNullException(nameof(logger));
@@ -101,10 +102,13 @@ namespace ServerEngine.Network.ServerSession
             if (null == recv_event_args)
                 throw new ArgumentNullException(nameof(recv_event_args));
 
+            if (null == recv_stream)
+                throw new ArgumentNullException(nameof(recv_stream));
+
             if (0 >= token_id)
                 throw new ArgumentNullException(nameof(token_id));
 
-            if (false == base.InitializeBase(logger, config_network, socket, send_event_args, recv_event_args))
+            if (false == base.InitializeBase(logger, config_network, socket, send_event_args, recv_event_args, recv_stream))
             {
                 Logger.Error($"Error in ClientUserToken.Initialize() - Fail to Initialize");
                 return false;

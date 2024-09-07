@@ -1,21 +1,10 @@
-﻿using System;
-using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.Linq;
-using System.Net;
+﻿using System.Net;
 using System.Net.Sockets;
-using System.Reflection.Metadata.Ecma335;
-using System.Security.AccessControl;
-using System.Text;
 using System.Threading.Channels;
-using System.Threading.Tasks;
 using ServerEngine.Common;
 using ServerEngine.Config;
-using ServerEngine.Log;
 using ServerEngine.Network.Message;
 using ServerEngine.Network.SystemLib;
-using System.Net.Http.Headers;
-using System.Diagnostics.CodeAnalysis;
 
 namespace ServerEngine.Network.ServerSession
 {
@@ -107,6 +96,7 @@ namespace ServerEngine.Network.ServerSession
         private IPEndPoint? mRemoteEndPoint;
         private bool mDisposed = false;
         private volatile bool mConnected = false;
+        private IConfigNetwork mConfigNetwork;
 
         #region property
         public long mTokenId { get; protected set; } = 0;
@@ -119,16 +109,17 @@ namespace ServerEngine.Network.ServerSession
 
         public SocketAsyncEventArgs? SendAsyncEvent { get; private set; }
         public SocketAsyncEventArgs? RecvAsyncEvent { get; private set; }
-        public MessageProcessor? MessageHandler { get; private set; }
+        public RecvMessageHandler? RecvMessageHandler { get; private set; }
 
         public IPEndPoint? GetLocalEndPoint => mLocalEndPoint;
         public IPEndPoint? GetRemoteEndPoint => mRemoteEndPoint;
         #endregion
 
-        protected bool InitializeBase(Log.ILogger logger, IConfigNetwork config_network, SocketBase socket, SocketAsyncEventArgs send_event_args, SocketAsyncEventArgs recv_event_args)
+        protected bool InitializeBase(Log.ILogger logger, IConfigNetwork config_network, SocketBase socket, SocketAsyncEventArgs send_event_args, SocketAsyncEventArgs recv_event_args, RecvStream recv_stream)
         {
             this.Socket = socket;
             this.Logger = logger;
+            mConfigNetwork = config_network;
 
             mLocalEndPoint = (IPEndPoint?)socket.GetSocket?.LocalEndPoint;
             mRemoteEndPoint = (IPEndPoint?)socket.GetSocket?.RemoteEndPoint;
@@ -139,7 +130,8 @@ namespace ServerEngine.Network.ServerSession
             var config_socket = config_network.config_socket;
 
             SendQueue = Channel.CreateBounded<ArraySegment<byte>>(capacity: config_socket.send_queue_size);
-            MessageHandler = new MessageProcessor(config_socket.recv_buff_size);
+            //RecvMessageHandler = new RecvMessageHandler(max_buffer_size: config_socket.recv_buff_size, logger: logger);
+            RecvMessageHandler = new RecvMessageHandler(stream: recv_stream, max_buffer_size: config_socket.recv_buff_size, logger: logger);
 
             mConnected = true;
 
@@ -162,7 +154,6 @@ namespace ServerEngine.Network.ServerSession
 
                 SendQueue.Writer.TryWrite(buffer);
             }
-
         }
 
         public virtual ValueTask StartSendAsync(ArraySegment<byte> buffer, CancellationToken cancel_token)
@@ -227,7 +218,7 @@ namespace ServerEngine.Network.ServerSession
             }
         }
 
-        public virtual void StartReceive(RecvStream stream)
+        public virtual void StartReceive(/*RecvStream stream*/)
         {
             if (false == Socket.IsNullSocket())
             {
@@ -255,12 +246,21 @@ namespace ServerEngine.Network.ServerSession
 
             try
             {
-                var buffer = stream.Buffer;
-                RecvAsyncEvent.SetBuffer(buffer: buffer.Array, offset: buffer.Offset, count: buffer.Count);
-
-                var pending = Socket.GetSocket?.ReceiveAsync(e: RecvAsyncEvent);
-                if (false == pending)
-                    OnRecvCompleteHandler(null, e: RecvAsyncEvent);
+                // RecvStreamPool에서 해당 UserToken 전용 RecvStream을 할당
+                // session 만료 or socket disconnect 시, Pool에 반환
+                var buffer = RecvMessageHandler?.GetBuffer;
+                if (buffer.HasValue)
+                {
+                    RecvAsyncEvent.SetBuffer(buffer: buffer.Value.Array, offset: buffer.Value.Offset, count: buffer.Value.Count);
+                    var pending = Socket.GetSocket?.ReceiveAsync(e: RecvAsyncEvent);
+                    if (false == pending)
+                        OnRecvCompleteHandler(null, e: RecvAsyncEvent);
+                }
+                else
+                {
+                    Logger.Error($"Error in UserToken.StartReceive() - Buffer Set Error");
+                    return;
+                }
             }
             catch (Exception ex)
             {
@@ -271,33 +271,62 @@ namespace ServerEngine.Network.ServerSession
 
         public virtual void OnRecvCompleteHandler(object? sender, SocketAsyncEventArgs e)
         {
+            var socket_error = e.SocketError;
+            var bytes_transferred = e.BytesTransferred;
+
+            if (false == AsyncCallbackChecker.CheckCallbackHandler(socket_error, bytes_transferred))
+            {
+                Logger.Error($"Error in UserToken.OnRecvCompleteHandler() - SocketError = {socket_error}, BytesTransferred = {bytes_transferred}");
+                return;
+            }
+
+            if (null == RecvMessageHandler)
+            {
+                return;
+            }
+
+            Socket.RemoveState(SocketBase.eSocketState.Recving);
+
             try
             {
-                var socket_error = e.SocketError;
-                var bytes_transferred = e.BytesTransferred;
-
-                if (false == AsyncCallbackChecker.CheckCallbackHandler(socket_error, bytes_transferred))
+                if (false == RecvMessageHandler.WriteMessage(bytes_transferred))
                 {
-                    Logger.Error($"Error in UserToken.OnRecvCompleteHandler() - SocketError = {socket_error}, BytesTransferred = {bytes_transferred}");
                     return;
                 }
 
-                Socket.RemoveState(SocketBase.eSocketState.Recving);
-
-                try
+                ArraySegment<byte> recv_buffer;
+                var read_result = RecvMessageHandler.TryGetReadBuffer(out recv_buffer);
+                if (false == read_result)
                 {
+                    var max_recv_buffer = mConfigNetwork.config_socket.recv_buff_size;
+                    RecvMessageHandler.ResetBuffer(new RecvStream(buffer_size: max_recv_buffer), max_recv_buffer);
 
+                    RecvMessageHandler.TryGetReadBuffer(out recv_buffer);
+
+                    Logger.Warn($"Warning in UserToken.OnRecvCompleteHandler() - RecvStream is created by new allocator");
                 }
-                catch (Exception)
+
+                var process_length = RecvMessageHandler?.ProcessReceive(recv_buffer);
+                if (false == process_length.HasValue || 
+                    0 > process_length || RecvMessageHandler?.GetHaveToReadSize < process_length)
                 {
-
-                    throw;
+                    Logger.Error($"Error in UserToken.OnRecvCompleteHandler() - read bytes = {process_length}");
+                    return; 
                 }
+
+
+                if (false == RecvMessageHandler?.ReadMessage(process_length.Value))
+                {
+                    return;
+                }
+
+                StartReceive();
+
             }
             catch (Exception ex)
             {
                 Logger.Error($"Exception in UserToken.OnRecvCompleteHandler() - {ex.Message} - {ex.StackTrace}");
-                throw;
+                return;
             }
         }
 
