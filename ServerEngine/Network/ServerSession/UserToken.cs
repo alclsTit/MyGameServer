@@ -139,7 +139,8 @@ namespace ServerEngine.Network.ServerSession
         }
 
         #region public_method
-        public virtual void StartSend(ArraySegment<byte> buffer)
+        // 여러 스레드에서 호출. 패킷 send 진행 시 큐에 동기로 데이터 추가
+        public virtual bool StartSend(ArraySegment<byte> buffer)
         {
             if (null == buffer.Array) 
                 throw new ArgumentNullException(nameof(buffer));
@@ -148,14 +149,12 @@ namespace ServerEngine.Network.ServerSession
                 throw new NullReferenceException(nameof(SendQueue));
 
             if (false == Socket.UpdateState(SocketBase.eSocketState.Sending))
-            {
-                if (Logger.IsEnableDebug)
-                    Logger.Debug($"Debug in UserToken.StartSend() - Fail to update send state [sending]");
+                Logger.Error($"Error in UserToken.StartSend() - Fail to update send state [sending]");
 
-                SendQueue.Writer.TryWrite(buffer);
-            }
+            return SendQueue.Writer.TryWrite(buffer);
         }
 
+        // 여러 스레드에서 호출. 패킷 send 진행 시 큐에 비동기로 데이터 추가
         public virtual ValueTask StartSendAsync(ArraySegment<byte> buffer, CancellationToken cancel_token)
         {
             if (null == buffer.Array) 
@@ -165,14 +164,12 @@ namespace ServerEngine.Network.ServerSession
                 throw new NullReferenceException(nameof(SendQueue));
 
             if (false == Socket.UpdateState(SocketBase.eSocketState.Sending))
-            {
-                if (Logger.IsEnableDebug)
-                    Logger.Debug($"Debug in UserToken.StartSendAsync() - Fail to update send state [sending]");
-            }
+                Logger.Error($"Error in UserToken.StartSendAsync() - Fail to update send state [sending]");
 
             return SendQueue.Writer.WriteAsync(buffer, cancel_token);
         }
 
+        // 별도의 패킷 처리 스레드에서 호출. 큐잉된 패킷 데이터들에 대한 실질적인 비동기 send 진행
         public virtual async ValueTask SendAsync()
         {
             if (false == Connected)
@@ -332,7 +329,7 @@ namespace ServerEngine.Network.ServerSession
             }
         }
 
-        public virtual void ProcessEnd(bool force_close)
+        public virtual void ProcessClose(bool force_close)
         {
             try
             {

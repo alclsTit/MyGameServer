@@ -240,6 +240,7 @@ namespace ServerEngine.Network.SystemLib
                     return;
                 }
 
+                // connection 완료시 UserToken 생성 및 해당 token에 대한 receive / send 로직 처리 진행
                 ServerModule.OnNewClientCreateHandler(e, false);
 
                 Interlocked.Increment(ref mAcceptCount);
@@ -253,13 +254,12 @@ namespace ServerEngine.Network.SystemLib
             catch (Exception ex)
             {
                 Logger.Error($"Exception in TcpAcceptor.OnAcceptCompleteHandler() - {ex.Message} - {ex.StackTrace}");
-
-                mAcceptEventArgsPool?.Return(e);
                 Interlocked.Decrement(ref mAcceptCount);
             }
             finally
             {
-                //StartAccept();
+                // 사용된 객체 반환
+                mAcceptEventArgsPool?.Return(e);
             }
         }
 

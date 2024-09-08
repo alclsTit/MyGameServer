@@ -174,6 +174,7 @@ namespace ServerEngine.Network.SystemLib
                     return;
                 }
 
+                // connection 완료시 UserToken 생성 및 해당 token에 대한 receive / send 로직 처리 진행
                 ServerModule.OnNewClientCreateHandler(e, true);
 
                 /*if (e.UserToken?.GetType() == typeof(ClientUserToken))
@@ -206,6 +207,7 @@ namespace ServerEngine.Network.SystemLib
             catch (Exception ex)
             {
                 Logger.Error($"Exception in TcpConnector.OnConnectCompleteHandler() - {ex.Message} - {ex.StackTrace}", ex);
+                return;
             }
         }
 
