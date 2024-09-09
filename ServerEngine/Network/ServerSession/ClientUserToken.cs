@@ -81,7 +81,7 @@ namespace ServerEngine.Network.ServerSession
             {
                 foreach (var token in mThreadUserTokens[index])
                 {
-                    await token.SendAsync();
+                    await token.ProcessSendAsync();
                 }
 
                 Thread.Sleep(10);

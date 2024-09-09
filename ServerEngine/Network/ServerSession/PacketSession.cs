@@ -11,7 +11,8 @@ using System.Net;
 
 namespace ServerEngine.Network.ServerSession
 {
-    public abstract class PacketSession : Session
+    // 24.09.09 삭제 예정
+    /*public abstract class PacketSession : Session
     {
         // 패킷 구조 =                헤더                       +       바디 
         //            [패킷 바디사이즈 + 메시지 아이디 + 송신시간] + [실제 패킷 메시지]
@@ -99,5 +100,5 @@ namespace ServerEngine.Network.ServerSession
 
         }
     }
-
+    */
 }

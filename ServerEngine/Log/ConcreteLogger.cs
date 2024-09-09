@@ -7,45 +7,7 @@ using ServerEngine.Config;
 
 namespace ServerEngine.Log
 {
-    /// <summary>
-    /// LogFactory 객체 생성 구현 파생클래스 
-    /// </summary>
-    public class LoggerFactory : ILogFactory
-    {
-        /// <summary>
-        /// Log4Net을 사용한 Logger
-        /// </summary>
-        /// <param name="name"></param>
-        /// <returns></returns>
-        public ILogger GetLogger(string name)
-        {
-           return new ConsoleLogger(name);
-        }
-
-        /// <summary>
-        /// SeriLog를 사용한 Logger
-        /// </summary>
-        /// <param name="path"></param>
-        /// <param name="name"></param>
-        /// <param name="output_format"></param>
-        /// <returns></returns>
-
-        public ILogger GetLogger(string path, string? name, Config.ILogger? config = default, SeriLogger.eOutputFormat output_format = SeriLogger.eOutputFormat.Text)
-        {
-            var root_path = Path.GetDirectoryName(System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName);
-            var log_path = Path.Join(root_path, "logs");
-
-            var config_etc = ConfigLoader.LoadJson<IConfigEtc>("config_etc", ConfigLoader.eFileExtensionType.json);
-            if (null != config_etc)
-            {
-                return new ConsoleFileLogger(log_path, config_etc.name, config_etc.logger, output_format);
-            }
-            else
-            {
-                return new ConsoleFileLogger(log_path);
-            }
-        }
-    }
+    
 
     /// <summary>
     /// Console 창에 찍히는 로그 관련 클래스
@@ -124,6 +86,9 @@ namespace ServerEngine.Log
         #endregion
     }
 
+    /// <summary>
+    /// SeriLog를 사용한 콘솔 및 폴더에 로그가 생성되도록 하는 로거
+    /// </summary>
 
     public sealed class ConsoleFileLogger : SeriLogger
     {

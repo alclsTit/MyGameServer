@@ -49,6 +49,6 @@ namespace ServerEngine.Common
 
         public static readonly int MAX_PACKET_HEADER_SIZE = 2;                      // 2byte
         public static readonly int MAX_PACKET_HEADER_TYPE = 2;                      // 2byte
-
+        public static readonly int MAX_PACKET_DEFINITION_SIZE = 65535;              
     }
 }

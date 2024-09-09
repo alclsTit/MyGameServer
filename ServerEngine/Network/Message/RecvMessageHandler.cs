@@ -160,6 +160,9 @@ namespace ServerEngine.Network.Message
 
             int id = nullable_header_id.HasValue ? nullable_header_id.Value : BitConverter.ToUInt16(buffer.Array, Utility.MAX_PACKET_HEADER_SIZE);
 
+            // Todo: 전달받은 packet type(id)에 맞는 등록된 패킷 핸들러를 실행하는 로직 진행
+            // ArraySegment<byte>를 전달한뒤 deserialize 진행
+
             return true;
         }
 

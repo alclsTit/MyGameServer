@@ -10,6 +10,7 @@ using ServerEngine.Common;
 
 namespace ServerEngine.Network.Server
 {
+    // 24.09.09 삭제 예정
     /*public sealed class AppServer : AppServerBase
     {
         private ThreadManager mThreadManager;

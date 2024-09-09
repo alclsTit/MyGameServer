@@ -10,6 +10,8 @@ using ServerEngine.Common;
 
 namespace ServerEngine.Config
 {
+    // 24.09.09 삭제 예정
+    /*
     /// <summary>
     /// Config 관련 로드작업에 사용되는 추상클래스
     /// </summary>
@@ -188,4 +190,5 @@ namespace ServerEngine.Config
             return true;
         }
     }
+    */
 }

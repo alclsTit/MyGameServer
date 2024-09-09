@@ -17,9 +17,17 @@
 
   <ItemGroup>
     <Folder Include="Log\" />
+    <Folder Include="Protocol\output\" />
+    <Folder Include="Protocol\Proto\" />
   </ItemGroup>
 
   <ItemGroup>
+    <None Include="..\..\converter\proto\csharp\client_message.proto" Link="Protocol\Proto\client_message.proto" />
+    <None Include="..\..\converter\proto\csharp\server_message.proto" Link="Protocol\Proto\server_message.proto" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Google.Protobuf" Version="3.28.0" />
     <PackageReference Include="log4net" Version="2.0.14" />
     <PackageReference Include="Microsoft.Extensions.ObjectPool" Version="7.0.0-preview.3.22178.4" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />

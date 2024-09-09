@@ -56,7 +56,6 @@ namespace ServerEngine.Network.Message
 
     public class RecvStream : Stream
     {
-
         public RecvStream(int buffer_size) 
             : base(buffer_size) 
         { 

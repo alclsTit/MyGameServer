@@ -7,8 +7,9 @@ using System.Threading;
 
 namespace ServerEngine.Network.Message
 {
+    // 24.09.09 삭제 예정
     // 2022.05.12 Send 패킷관련 작업 중 필요없는 부분 삭제
-    public class SendMessageHelper
+    /*public class SendMessageHelper
     {
         public static ThreadLocal<SendMessageBuilder> msCurrentBuffer = new ThreadLocal<SendMessageBuilder>(() => null);
 
@@ -38,4 +39,5 @@ namespace ServerEngine.Network.Message
             return msCurrentBuffer.Value.Close(used);
         }
     }
+    */
 }

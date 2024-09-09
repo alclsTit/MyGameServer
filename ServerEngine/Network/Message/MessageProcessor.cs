@@ -6,13 +6,12 @@ using System.Threading.Tasks;
 
 namespace ServerEngine.Network.Message
 {
-
-
+    // 24.09.09 삭제 예정
     /// <summary>
     /// Recv 수신버퍼
     /// * Session 당 한개씩 배정
     /// </summary>
-    public class MessageProcessor
+    /*public class MessageProcessor
     {
         private ArraySegment<byte> mRecvBuffer;
         private int mNumOfWrite;
@@ -79,4 +78,5 @@ namespace ServerEngine.Network.Message
             }
         }
     }
+    */
 }

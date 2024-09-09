@@ -8,7 +8,8 @@ using ServerEngine.Network.SystemLib;
 
 namespace ServerEngine.Config
 {
-    public class ListenConfig : IListenInfo
+    // 24.09.09 삭제 예정
+    /*public class ListenConfig : IListenInfo
     {
         public string ip { get; private set; }
 
@@ -29,4 +30,5 @@ namespace ServerEngine.Config
             this.serverName = serverName;
         }
     }
+    */
 }

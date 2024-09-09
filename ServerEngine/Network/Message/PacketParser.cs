@@ -4,10 +4,80 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.IO;
-using FlatSharp; 
+using NetworkEngineMessage;
+using Google.Protobuf;
+using ServerEngine.Common;
 
 namespace ServerEngine.Network.Message
 {
+    // Protobuf 관련 직렬화 / 역직렬화 
+    public class ProtoParser
+    {
+        public ArraySegment<byte> Serialize<TMessage>(TMessage message, ushort message_id) where TMessage : IMessage
+        {
+            if (null == message)
+                throw new ArgumentNullException(nameof(message));
+
+            if (0 > message_id || Utility.MAX_PACKET_DEFINITION_SIZE < message_id)
+                throw new ArgumentOutOfRangeException(nameof(message_id));
+
+            try
+            {
+                var header_size = Utility.MAX_PACKET_HEADER_SIZE + Utility.MAX_PACKET_HEADER_TYPE;
+                var body_size = message.CalculateSize();
+                var packet_size = header_size + body_size;
+
+                int offset = 0;
+                var buffer = new ArraySegment<byte>(new byte[packet_size]);
+
+                Buffer.BlockCopy(BitConverter.GetBytes(header_size), 0, buffer.Array?? new byte[packet_size], offset, Utility.MAX_PACKET_HEADER_SIZE);
+                offset += Utility.MAX_PACKET_HEADER_SIZE;
+
+                Buffer.BlockCopy(BitConverter.GetBytes(message_id), 0, buffer.Array ?? new byte[packet_size], offset, Utility.MAX_PACKET_HEADER_TYPE);
+                offset += Utility.MAX_PACKET_HEADER_TYPE;
+
+                Buffer.BlockCopy(message.ToByteArray(), 0, buffer.Array ?? new byte[body_size], offset, body_size);
+
+                return buffer;
+            }
+            catch (Exception)
+            {
+                throw;
+            }
+        }
+
+        // proto 파일 컨버팅시 생성되는 message는 기본생성자를 포함하고 있다 > new() 제약조건 가능 
+        public TMessage Deserialize<TMessage>(ref ArraySegment<byte> buffer) where TMessage : IMessage<TMessage>, new()
+        {
+            if (null == buffer.Array)
+                throw new ArgumentNullException(nameof(buffer));
+
+            try
+            {
+                int offset = 0;
+                var read_span = new ReadOnlySpan<byte>(buffer.Array, buffer.Offset, buffer.Count);
+
+                var packet_size = BitConverter.ToUInt16(read_span.Slice(offset, Utility.MAX_PACKET_HEADER_SIZE));
+                offset += Utility.MAX_PACKET_HEADER_SIZE;
+
+                var message_id = BitConverter.ToUInt16(read_span.Slice(offset, Utility.MAX_PACKET_HEADER_TYPE));
+                offset += Utility.MAX_PACKET_HEADER_TYPE;
+
+                var header_size = Utility.MAX_PACKET_HEADER_SIZE + Utility.MAX_PACKET_HEADER_TYPE;
+                var body_size = packet_size - header_size;
+
+                var parser = new MessageParser<TMessage>(() => new TMessage());
+                return parser.ParseFrom(buffer.Array, header_size, body_size);
+            }
+            catch (Exception)
+            {
+                throw;
+            }
+        }
+    }
+
+    // Packet 객체를 상속한 대상에 대한 직렬화 / 역직렬화
+    // Todo: Protobuf 이외의 패킷에 대한 직렬화 / 역직렬화 기능을 갖춘 클래스로 구현 예정
     public class PacketParser
     {
         /// <summary>

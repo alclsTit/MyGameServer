@@ -8,6 +8,8 @@ using ServerEngine.Network.SystemLib;
 
 namespace ServerEngine.Config
 {
+    // 24.09.09 삭제 예정
+    /*
     public abstract class ServerConfig : IServerInfo
     {
         /// <summary>
@@ -133,146 +135,146 @@ namespace ServerEngine.Config
     }
 
     #region "삭제예정 백업본"
-    /*public class ServerConfig : IServerInfo
-    {
-        // Set Default Value
-        //-------------------------------------------------------------------------
-
-        /// <summary>
-        /// Default max connect count
-        /// </summary>
-        public readonly int DefaultMaxConnectNumber = 100;
-
-        /// <summary>
-        /// Default SendBufferSize
-        /// </summary>
-        public const int DefaultSendBufferSize = 1024 * 4;
-
-        /// <summary>
-        /// Default RecvBufferSize
-        /// </summary>
-        public const int DefaultRecvBufferSize = 1024 * 4;
-
-        /// <summary>
-        /// Default KeepAlivetime
-        /// </summary>
-        public readonly int DefaultKeepAliveTime = 60 * 10; // sec
-
-        /// <summary>
-        /// Default KeepAliveInterval
-        /// </summary>
-        public readonly int DefaultKeepAliveInterval = 60; // sec
-
-        /// <summary>
-        /// Default Per SendingQueue Size
-        /// </summary>
-        public readonly int DefaultSendingQueueSize = 5;
-
-        /// <summary>
-        /// Default worker threadpool mincount
-        /// </summary>
-        public readonly int DefaultMinWorkThreadCount = Environment.ProcessorCount;
-
-        /// <summary>
-        /// Default worker threadpool maxcount
-        /// </summary>
-        public readonly int DefaultMaxWorkThreadCount = 2000;
-
-        /// <summary>
-        /// Default IO threadpool mincount
-        /// </summary>
-        public readonly int DefaultMinIOThreadCount = Environment.ProcessorCount;
-
-        /// <summary>
-        /// Default IO threadpool maxcount
-        /// </summary>
-        public readonly int DefaultMaxIOThreadCount = 1000;
-
-        /// <summary>
-        /// Socket Option (Linger) flag
-        /// </summary>
-        public readonly bool DefaultSocketLingerFlag = false;
-
-        /// <summary>
-        /// Socket Option (Linger = true) DelayTime
-        /// </summary>
-        public readonly int DefaultSocketLingerDelayTime = 10;
-
-        /// <summary>
-        /// encoding
-        /// </summary>
-        public readonly string DefaultEncoding = Encoding.Default.ToString();
-
-        //-------------------------------------------------------------------------
-
-        // 1. Accpet Socket Recv/Send SocketAsyncEventArgs Pooling 갯수
-        public int maxConnectNumber { get; set; }
-
-        // 2. IP
-        public string ip { get; set; }
-
-        // 3. Port
-        public ushort port { get; set; }
-
-        // 4. KeepAliveTime 
-        public int keepAliveTime { get; set; }
-
-        // 5. KeepAliveInterval
-        public int keepAliveInterval { get; set; }
-
-        // 6. Naggle 알고리즘 사용 유뮤 (true:미사용, false:사용)
-        public bool nodelay { get; set; }
-
-        // 7. 소켓 타입 (tcp - udp)
-        public eProtocolType protocolType { get; set; }
-
-        // 8. Send용 버퍼사이즈
-        public int sendBufferSize { get; set; }
-
-        // 9. Recv용 버퍼사이즈
-        public int recvBufferSize { get; set; }
-
-        // 10. Per SendingQueue 사이즈
-        public int sendingQueueSize { get; set; }
-
-        // 12. Min Thread Count 
-        public int minWorkThreadCount { get; set; }
-
-        // 13. Max Thread Count
-        public int maxWorkThreadCount { get; set; }
-
-        // 14. Max Thread Count
-        public int minIOThreadCount { get; set; }
-
-        // 15. Max Thread Count
-        public int maxIOThreadCount { get; set; }
-
-        // 16. Socket Option (Linger) flag
-        public bool socketLingerFlag { get; set; }
-
-        // 17. Socket Option (Linger = true) DelayTime
-        public int socketLingerDelayTime { get; set; }
-
-        // 18. Encoding
-        public string encoding { get; set; }
-
-        public ServerConfig()
-        {
-            maxConnectNumber = DefaultMaxConnectNumber;
-            keepAliveTime = DefaultKeepAliveTime;
-            keepAliveInterval = DefaultKeepAliveInterval;
-            sendBufferSize = DefaultSendBufferSize;
-            recvBufferSize = DefaultRecvBufferSize;
-            sendingQueueSize = DefaultSendingQueueSize;
-            minWorkThreadCount = DefaultMinWorkThreadCount;
-            maxWorkThreadCount = DefaultMaxWorkThreadCount;
-            minIOThreadCount = DefaultMinIOThreadCount;
-            maxIOThreadCount = DefaultMaxIOThreadCount;
-            socketLingerFlag = DefaultSocketLingerFlag;
-            socketLingerDelayTime = DefaultSocketLingerDelayTime;
-            encoding = DefaultEncoding;         
-        }
-    }
-    */
+    //public class ServerConfig : IServerInfo
+    //{
+    //    // Set Default Value
+    //    //-------------------------------------------------------------------------
+    //
+    //    /// <summary>
+    //    /// Default max connect count
+    //    /// </summary>
+    //    public readonly int DefaultMaxConnectNumber = 100;
+    //
+    //    /// <summary>
+    //    /// Default SendBufferSize
+    //    /// </summary>
+    //    public const int DefaultSendBufferSize = 1024 * 4;
+    //
+    //    /// <summary>
+    //    /// Default RecvBufferSize
+    //    /// </summary>
+    //    public const int DefaultRecvBufferSize = 1024 * 4;
+    //
+    //    /// <summary>
+    //    /// Default KeepAlivetime
+    //    /// </summary>
+    //    public readonly int DefaultKeepAliveTime = 60 * 10; // sec
+    //
+    //    /// <summary>
+    //    /// Default KeepAliveInterval
+    //    /// </summary>
+    //    public readonly int DefaultKeepAliveInterval = 60; // sec
+    //
+    //    /// <summary>
+    //    /// Default Per SendingQueue Size
+    //    /// </summary>
+    //    public readonly int DefaultSendingQueueSize = 5;
+    //
+    //    /// <summary>
+    //    /// Default worker threadpool mincount
+    //    /// </summary>
+    //    public readonly int DefaultMinWorkThreadCount = Environment.ProcessorCount;
+    //
+    //    /// <summary>
+    //    /// Default worker threadpool maxcount
+    //    /// </summary>
+    //    public readonly int DefaultMaxWorkThreadCount = 2000;
+    //
+    //    /// <summary>
+    //    /// Default IO threadpool mincount
+    //    /// </summary>
+    //    public readonly int DefaultMinIOThreadCount = Environment.ProcessorCount;
+    //
+    //    /// <summary>
+    //    /// Default IO threadpool maxcount
+    //    /// </summary>
+    //    public readonly int DefaultMaxIOThreadCount = 1000;
+    //
+    //    /// <summary>
+    //    /// Socket Option (Linger) flag
+    //    /// </summary>
+    //    public readonly bool DefaultSocketLingerFlag = false;
+    //
+    //    /// <summary>
+    //    /// Socket Option (Linger = true) DelayTime
+    //    /// </summary>
+    //    public readonly int DefaultSocketLingerDelayTime = 10;
+    //
+    //    /// <summary>
+    //    /// encoding
+    //    /// </summary>
+    //    public readonly string DefaultEncoding = Encoding.Default.ToString();
+    //
+    //    //-------------------------------------------------------------------------
+    //
+    //    // 1. Accpet Socket Recv/Send SocketAsyncEventArgs Pooling 갯수
+    //    public int maxConnectNumber { get; set; }
+    //
+    //    // 2. IP
+    //    public string ip { get; set; }
+    //
+    //    // 3. Port
+    //    public ushort port { get; set; }
+    //
+    //    // 4. KeepAliveTime 
+    //    public int keepAliveTime { get; set; }
+    //
+    //    // 5. KeepAliveInterval
+    //    public int keepAliveInterval { get; set; }
+    //
+    //    // 6. Naggle 알고리즘 사용 유뮤 (true:미사용, false:사용)
+    //    public bool nodelay { get; set; }
+    //
+    //    // 7. 소켓 타입 (tcp - udp)
+    //    public eProtocolType protocolType { get; set; }
+    //
+    //    // 8. Send용 버퍼사이즈
+    //    public int sendBufferSize { get; set; }
+    //
+    //    // 9. Recv용 버퍼사이즈
+    //    public int recvBufferSize { get; set; }
+    //
+    //    // 10. Per SendingQueue 사이즈
+    //    public int sendingQueueSize { get; set; }
+    //
+    //    // 12. Min Thread Count 
+    //    public int minWorkThreadCount { get; set; }
+    //
+    //    // 13. Max Thread Count
+    //    public int maxWorkThreadCount { get; set; }
+    //
+    //    // 14. Max Thread Count
+    //    public int minIOThreadCount { get; set; }
+    //
+    //    // 15. Max Thread Count
+    //    public int maxIOThreadCount { get; set; }
+    //
+    //    // 16. Socket Option (Linger) flag
+    //    public bool socketLingerFlag { get; set; }
+    //
+    //    // 17. Socket Option (Linger = true) DelayTime
+    //    public int socketLingerDelayTime { get; set; }
+    //
+    //    // 18. Encoding
+    //    public string encoding { get; set; }
+    //
+    //    public ServerConfig()
+    //    {
+    //        maxConnectNumber = DefaultMaxConnectNumber;
+    //        keepAliveTime = DefaultKeepAliveTime;
+    //        keepAliveInterval = DefaultKeepAliveInterval;
+    //        sendBufferSize = DefaultSendBufferSize;
+    //        recvBufferSize = DefaultRecvBufferSize;
+    //        sendingQueueSize = DefaultSendingQueueSize;
+    //        minWorkThreadCount = DefaultMinWorkThreadCount;
+    //        maxWorkThreadCount = DefaultMaxWorkThreadCount;
+    //        minIOThreadCount = DefaultMinIOThreadCount;
+    //        maxIOThreadCount = DefaultMaxIOThreadCount;
+    //        socketLingerFlag = DefaultSocketLingerFlag;
+    //        socketLingerDelayTime = DefaultSocketLingerDelayTime;
+    //        encoding = DefaultEncoding;         
+    //    }
+    //}
     #endregion
+    */
 }

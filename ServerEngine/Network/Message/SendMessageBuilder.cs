@@ -6,7 +6,8 @@ using System.Threading.Tasks;
 
 namespace ServerEngine.Network.Message
 {
-    public class SendMessageBuilder
+    // 24.09.09 삭제 예정
+    /*public class SendMessageBuilder
     {
         private byte[] mSendBuffer;
 
@@ -34,4 +35,5 @@ namespace ServerEngine.Network.Message
             return oldBuffer;
         }
     }
+    */
 }

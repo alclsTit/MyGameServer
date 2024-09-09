@@ -10,6 +10,8 @@ using ServerEngine.Common;
 
 namespace ServerEngine.Config
 {
+    // 24.09.09 삭제 예정
+    /*
     public interface IConfigLoader<ConfigInfo> where ConfigInfo : ServerConfig, new()
     {
         void Initialize(string fileName, eFileExtension fileExtension = eFileExtension.INI);
@@ -19,5 +21,5 @@ namespace ServerEngine.Config
         bool LoadListeners(List<IListenInfo> listeners);
       
     }
-
+    */
 }

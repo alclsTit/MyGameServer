@@ -5,6 +5,7 @@ using ServerEngine.Common;
 using ServerEngine.Config;
 using ServerEngine.Network.Message;
 using ServerEngine.Network.SystemLib;
+using Google.Protobuf;
 
 namespace ServerEngine.Network.ServerSession
 {
@@ -109,6 +110,7 @@ namespace ServerEngine.Network.ServerSession
         public SocketAsyncEventArgs? SendAsyncEvent { get; private set; }           // retrieve target
         public SocketAsyncEventArgs? RecvAsyncEvent { get; private set; }           // retrieve target
         public RecvMessageHandler? RecvMessageHandler { get; private set; }         // retrieve target
+        public ProtoParser mProtoParser { get; private set; } = new ProtoParser();
 
         public IPEndPoint? GetLocalEndPoint => mLocalEndPoint;
         public IPEndPoint? GetRemoteEndPoint => mRemoteEndPoint;
@@ -139,8 +141,40 @@ namespace ServerEngine.Network.ServerSession
         }
 
         #region public_method
+        // protobuf 형식의 메시지를 받아 직렬화한 뒤 비동기로 메시지 큐잉
+        public virtual async ValueTask SendAsync<TMessage>(TMessage message, ushort message_id, CancellationToken canel_token) 
+            where TMessage : IMessage
+        {
+            try
+            {
+                var buffer = mProtoParser.Serialize(message: message, message_id: message_id);
+                await StartSendAsync(ref buffer, canel_token);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Exception in UserToken.SendAsync() - {ex.Message} - {ex.StackTrace}");
+                return;
+            }
+        }
+
+        // protobuf 형식의 메시지를 받아 직렬화한 뒤 동기로 메시지 큐잉
+        public virtual bool Send<TMessage>(TMessage message, ushort message_id) 
+            where TMessage: IMessage
+        {
+            try
+            {
+                var buffer = mProtoParser.Serialize(message: message, message_id: message_id);
+                return StartSend(ref buffer);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Exception in UserToken.Send() - {ex.Message} - {ex.StackTrace}");
+                return false;
+            }
+        }
+
         // 여러 스레드에서 호출. 패킷 send 진행 시 큐에 동기로 데이터 추가
-        public virtual bool StartSend(ArraySegment<byte> buffer)
+        private bool StartSend(ref ArraySegment<byte> buffer)
         {
             if (null == buffer.Array) 
                 throw new ArgumentNullException(nameof(buffer));
@@ -155,7 +189,7 @@ namespace ServerEngine.Network.ServerSession
         }
 
         // 여러 스레드에서 호출. 패킷 send 진행 시 큐에 비동기로 데이터 추가
-        public virtual ValueTask StartSendAsync(ArraySegment<byte> buffer, CancellationToken cancel_token)
+        private ValueTask StartSendAsync(ref ArraySegment<byte> buffer, CancellationToken cancel_token)
         {
             if (null == buffer.Array) 
                 throw new ArgumentNullException(nameof(buffer));
@@ -170,7 +204,7 @@ namespace ServerEngine.Network.ServerSession
         }
 
         // 별도의 패킷 처리 스레드에서 호출. 큐잉된 패킷 데이터들에 대한 실질적인 비동기 send 진행
-        public virtual async ValueTask SendAsync()
+        public virtual async ValueTask ProcessSendAsync()
         {
             if (false == Connected)
                 return;

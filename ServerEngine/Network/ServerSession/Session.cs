@@ -16,7 +16,8 @@ using ServerEngine.Network.Message;
 
 namespace ServerEngine.Network.ServerSession
 {
-    public abstract class Session
+    // 24.09.09 삭제 예정
+    /*public abstract class Session
     {
         public string mSessionID { get; private set; }
 
@@ -79,7 +80,7 @@ namespace ServerEngine.Network.ServerSession
         /// <summary>
         /// Recv된 패킷처리 담당 클래스
         /// </summary>
-        public MessageProcessor mMessageProcessor;
+        //public MessageProcessor mMessageProcessor;
 
         private readonly object mLockObject = new object();
 
@@ -113,7 +114,7 @@ namespace ServerEngine.Network.ServerSession
             mLocalIPEndPoint = (IPEndPoint)clientSocket.LocalEndPoint;
 
             // Recv 처리관련 클래스 인스턴스 생성
-            mMessageProcessor = new MessageProcessor(config.recvBufferSize);
+            //mMessageProcessor = new MessageProcessor(config.recvBufferSize);
 
             mListenInfoList = listenInfoList;
         }
@@ -479,4 +480,5 @@ namespace ServerEngine.Network.ServerSession
         }
         #endregion
     }
+    */
 }

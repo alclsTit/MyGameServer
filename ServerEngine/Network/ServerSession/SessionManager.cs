@@ -14,7 +14,8 @@ using ServerEngine.Common;
 
 namespace ServerEngine.Network.ServerSession
 {
-    public interface ISessionManager
+    // 24.09.09 삭제 예정
+    /*public interface ISessionManager
     {
         string sessionID { get; }
 
@@ -273,9 +274,6 @@ namespace ServerEngine.Network.ServerSession
 
             Close(session.mSessionID);
         }
-        */
-    }
-
-
-    
+        
+    }*/
 }

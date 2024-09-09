@@ -11,6 +11,7 @@ using ServerEngine.Common;
 
 namespace ServerEngine.Network.Server
 {
+    // 24.09.09 삭제 예정
     /*public abstract class AppServerBase : IAppServer
     {
         //private static bool msInitConfigLoaderFlag = false;

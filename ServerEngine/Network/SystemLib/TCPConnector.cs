@@ -37,37 +37,6 @@ namespace ServerEngine.Network.SystemLib
             Name = name;
         }
 
-        /// <summary>
-        /// TCPConnecter 멤버 데이터 초기화
-        /// * 객체 인스턴스 생성 후 가장 먼저 호출하여 멤버 초기화 진행
-        /// </summary>
-        /// <param name="listenInfo"></param>
-        /// <param name="serverInfo"></param>
-        /// <param name="logger"></param>
-        /// <param name="creater"></param>
-        /*public override void Initialize(ServerModuleBase module, IListenInfo listenInfo, ServerConfig serverInfo, Logger logger, Func<Session> creater)
-        {
-            try
-            {
-                base.Initialize(module, listenInfo, serverInfo, logger, creater);
-
-                var oldState = ServerState.NotInitialized;
-                if (!ChangeState(oldState, ServerState.Initialized))
-                {
-                    logger.Error(this.ClassName(), this.MethodName(), $"TCPConnecter state is [{oldState}]. TCPConnecter can be Initialized when state is [NotInitialized]");
-                    return;
-                }
-            }
-            catch (ArgumentNullException argNullEx)
-            {
-                logger.Error(this.ClassName(), this.MethodName(), argNullEx);
-            }
-            catch (Exception ex)
-            {
-                logger.Error(this.ClassName(), this.MethodName(), ex);
-            }
-        }*/
-
         #region public_method
         public override bool Initialize()
         {
@@ -177,30 +146,6 @@ namespace ServerEngine.Network.SystemLib
                 // connection 완료시 UserToken 생성 및 해당 token에 대한 receive / send 로직 처리 진행
                 ServerModule.OnNewClientCreateHandler(e, true);
 
-                /*if (e.UserToken?.GetType() == typeof(ClientUserToken))
-                {
-                    // connection request by client
-                    var token = e.UserToken as ClientUserToken;
-                    if (null == token)
-                    {
-                        Logger.Error($"Error in TcpConnector.OnConnectCompleteHandler() - Fail to UserToken Casting [ClientUserToken]");
-                        return;
-                    }
-
-
-                }
-                else
-                {
-                    // connection request by server
-                    var token = e.UserToken as ServerUserToken;
-                    if (null == token)
-                    {
-                        Logger.Error($"Error in TcpConnector.OnConnectCompleteHandler() - Fail to UserToken Casting [ServerUserToken]");
-                        return;
-                    }
-                }
-                */
-
                 if (Logger.IsEnableDebug)
                     Logger.Debug($"Debug in TcpConnector.OnConnectCompleteHandler() - [{Name}][{mRemoteEndpoint?.Address}:{mRemoteEndpoint?.Port}] Server join Complete");
             }
@@ -242,11 +187,44 @@ namespace ServerEngine.Network.SystemLib
         }
         #endregion
 
+        /*
+        /// <summary>
+        /// TCPConnecter 멤버 데이터 초기화
+        /// * 객체 인스턴스 생성 후 가장 먼저 호출하여 멤버 초기화 진행
+        /// </summary>
+        /// <param name="listenInfo"></param>
+        /// <param name="serverInfo"></param>
+        /// <param name="logger"></param>
+        /// <param name="creater"></param>
+        public override void Initialize(ServerModuleBase module, IListenInfo listenInfo, ServerConfig serverInfo, Logger logger, Func<Session> creater)
+        {
+            try
+            {
+                base.Initialize(module, listenInfo, serverInfo, logger, creater);
+
+                var oldState = ServerState.NotInitialized;
+                if (!ChangeState(oldState, ServerState.Initialized))
+                {
+                    logger.Error(this.ClassName(), this.MethodName(), $"TCPConnecter state is [{oldState}]. TCPConnecter can be Initialized when state is [NotInitialized]");
+                    return;
+                }
+            }
+            catch (ArgumentNullException argNullEx)
+            {
+                logger.Error(this.ClassName(), this.MethodName(), argNullEx);
+            }
+            catch (Exception ex)
+            {
+                logger.Error(this.ClassName(), this.MethodName(), ex);
+            }
+        }
+
         /// <summary>
         /// ListenInfo의 IPEndPoint에 대한 Connect 진행 요청 메서드 
         /// </summary>
         /// <returns></returns>
-        /*public override bool Start()
+
+        public override bool Start()
         {
             var lIPEndPoint = GetIPEndPoint;
             if (lIPEndPoint == null)
