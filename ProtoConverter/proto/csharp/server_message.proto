@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+// c#언어에 한하여 구체적인 namespace 설정
+option csharp_namespace = "NetworkEngineMessage";
+
+// proto 파일 안에서 enum, message, service 이름의 충돌방지 논리적 namespace
+package ServerService;
+
+// spe : server protocol enum 
+// spm : server protocol message
+
+enum message_id
+{
+	none = 0;
+	spe_ping_pong_cs = 1;
+	spe_ping_pong_sc = 2;
+	max = 65535;
+}
+
+message spm_ping_pong_cs
+{
+	string message = 1;
+}
+
+message spm_ping_pong_sc
+{
+	string message = 1;
+}
+

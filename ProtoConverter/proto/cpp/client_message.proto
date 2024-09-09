@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+// c#언어에 한하여 구체적인 namespace 설정
+option csharp_namespcae = "NetworkEngineMessage";
+
+// proto 파일 안에서 enum, message, service 이름의 충돌방지 논리적 namespace
+package ClientService;
+
+enum message_id
+{
+	none = 0;
+	ping_pong_cs = 1;
+	ping_pong_sc = 2;
+	max = 65535;
+}
+
+message ping_pong_cs
+{
+	string message = 1;
+}
+
+message ping_pong_sc
+{
+	string message = 1;
+}
