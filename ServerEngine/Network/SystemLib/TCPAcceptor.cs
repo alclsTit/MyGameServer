@@ -185,14 +185,14 @@ namespace ServerEngine.Network.SystemLib
 
                 while (1 == mRunning)
                 {
+                    mThreadBlockEvent.WaitOne();
+                    
                     while (true == CheckMaxConnection())
                     {
                         // accept된 객체의 수가 현재 max_connection을 초과하게 되는 경우
                         // 기존 connection이 disconnect 될 때까지 추가 connect를 받지 않고 대기
                         Thread.Sleep(10);
                     }
-
-                    mThreadBlockEvent.WaitOne();
 
                     SocketAsyncEventArgs? accept_event_args = null;
                     try
