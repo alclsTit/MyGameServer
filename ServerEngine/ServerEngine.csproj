@@ -16,7 +16,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Folder Include="Log\" />
     <Folder Include="Protocol\output\" />
     <Folder Include="Protocol\Proto\" />
   </ItemGroup>

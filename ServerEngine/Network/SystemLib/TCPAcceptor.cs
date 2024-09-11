@@ -36,7 +36,7 @@ namespace ServerEngine.Network.SystemLib
         private DisposableObjectPool<SocketAsyncEventArgs>? mAcceptEventArgsPool;
 
         private Thread mAcceptThread;
-        private AutoResetEvent mThreadBlockEvent = new AutoResetEvent(false);
+        private AutoResetEvent mThreadBlockEvent = new AutoResetEvent(true);
         private volatile int mAcceptCount = 0;
         private volatile int mRunning = 0;
 
