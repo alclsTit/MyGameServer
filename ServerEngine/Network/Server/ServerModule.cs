@@ -16,6 +16,7 @@ using System.Collections.Frozen;
 using Microsoft.Extensions.ObjectPool;
 using System.Diagnostics.CodeAnalysis;
 using ServerEngine.Network.Message;
+using System.Linq.Expressions;
 
 namespace ServerEngine.Network.Server
 {
@@ -330,6 +331,13 @@ namespace ServerEngine.Network.Server
                     socket.SetSocketOption(config_network: Config.config_network);
                     socket.SetConnect(SocketBase.eConnectState.Connected);
 
+                    // send 
+                    var send_stream = mSendStreamPool.Get();
+                    if (null == send_stream)
+                    {
+                        send_stream = new SendStream(Config.config_network.config_socket.send_buff_size);
+                        Logger.Warn($"Warning in ServerModule.OnNewClientCreateHandler() - SendStream is created by new allocator");
+                    }
                     // receive
                     var recv_stream = mRecvStreamPool.Get();
                     if (null == recv_stream)

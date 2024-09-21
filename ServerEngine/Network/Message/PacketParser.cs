@@ -26,17 +26,19 @@ namespace ServerEngine.Network.Message
                 var header_size = Utility.MAX_PACKET_HEADER_SIZE + Utility.MAX_PACKET_HEADER_TYPE;
                 var body_size = message.CalculateSize();
                 var packet_size = header_size + body_size;
-
-                int offset = 0;
                 var buffer = new ArraySegment<byte>(new byte[packet_size]);
+                int offset = 0;
+                
+                if (null == buffer.Array)
+                    throw new NullReferenceException(nameof(buffer.Array));
 
-                Buffer.BlockCopy(BitConverter.GetBytes(header_size), 0, buffer.Array?? new byte[packet_size], offset, Utility.MAX_PACKET_HEADER_SIZE);
+                Buffer.BlockCopy(BitConverter.GetBytes(header_size), 0, buffer.Array, offset, Utility.MAX_PACKET_HEADER_SIZE);
                 offset += Utility.MAX_PACKET_HEADER_SIZE;
 
-                Buffer.BlockCopy(BitConverter.GetBytes(message_id), 0, buffer.Array ?? new byte[packet_size], offset, Utility.MAX_PACKET_HEADER_TYPE);
+                Buffer.BlockCopy(BitConverter.GetBytes(message_id), 0, buffer.Array, offset, Utility.MAX_PACKET_HEADER_TYPE);
                 offset += Utility.MAX_PACKET_HEADER_TYPE;
 
-                Buffer.BlockCopy(message.ToByteArray(), 0, buffer.Array ?? new byte[body_size], offset, body_size);
+                Buffer.BlockCopy(message.ToByteArray(), 0, buffer.Array, offset, body_size);
 
                 return buffer;
             }
@@ -44,6 +46,40 @@ namespace ServerEngine.Network.Message
             {
                 throw;
             }
+        }
+
+        public ArraySegment<byte> Serialize<TMessage>(TMessage message, ushort message_id, SendStream send_stream) where TMessage : IMessage
+        {
+            if (null == message)
+                throw new ArgumentNullException(nameof(message));
+
+            if (0 > message_id || Utility.MAX_PACKET_DEFINITION_SIZE < message_id)
+                throw new ArgumentOutOfRangeException(nameof(message_id));
+
+            if (null == send_stream.Buffer.Array)
+                throw new ArgumentNullException(nameof(send_stream.Buffer.Array));
+
+            try
+            {
+                var header_size = Utility.MAX_PACKET_HEADER_SIZE + Utility.MAX_PACKET_HEADER_TYPE;
+                var body_size = message.CalculateSize();
+                var packet_size = header_size + body_size;
+                int offset = 0;
+
+                Buffer.BlockCopy(BitConverter.GetBytes(header_size), 0, send_stream.Buffer.Array, offset, Utility.MAX_PACKET_HEADER_SIZE);
+                offset += Utility.MAX_PACKET_HEADER_SIZE;
+
+                Buffer.BlockCopy(BitConverter.GetBytes(message_id), 0, send_stream.Buffer.Array, offset, Utility.MAX_PACKET_HEADER_TYPE);
+                offset += Utility.MAX_PACKET_HEADER_TYPE;
+
+                Buffer.BlockCopy(message.ToByteArray(), 0, send_stream.Buffer.Array, offset, body_size);
+
+                return send_stream.Buffer;
+            }
+            catch (Exception )
+            {
+                throw;
+            }          
         }
 
         // proto 파일 컨버팅시 생성되는 message는 기본생성자를 포함하고 있다 > new() 제약조건 가능 
