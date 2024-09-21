@@ -97,7 +97,8 @@ namespace ServerEngine.Network.ServerSession
         private IPEndPoint? mRemoteEndPoint;
         private bool mDisposed = false;
         private volatile bool mConnected = false;
-        private IConfigNetwork mConfigNetwork;
+        private IConfigNetwork? mConfigNetwork;
+        private Func<SocketAsyncEventArgs?, SocketAsyncEventArgs?, bool>? mRetrieveEvent;
 
         #region property
         public long mTokenId { get; protected set; } = 0;
@@ -117,7 +118,7 @@ namespace ServerEngine.Network.ServerSession
         public bool Connected => mConnected;
         #endregion
 
-        protected bool InitializeBase(Log.ILogger logger, IConfigNetwork config_network, SocketBase socket, SocketAsyncEventArgs send_event_args, SocketAsyncEventArgs recv_event_args, RecvStream recv_stream)
+        protected bool InitializeBase(Log.ILogger logger, IConfigNetwork config_network, SocketBase socket, SocketAsyncEventArgs send_event_args, SocketAsyncEventArgs recv_event_args, RecvStream recv_stream, Func<SocketAsyncEventArgs?, SocketAsyncEventArgs?, bool> retrieve_event)
         {
             this.Socket = socket;
             this.Logger = logger;
@@ -136,6 +137,8 @@ namespace ServerEngine.Network.ServerSession
             RecvMessageHandler = new RecvMessageHandler(stream: recv_stream, max_buffer_size: config_socket.recv_buff_size, logger: logger);
 
             mConnected = true;
+
+            mRetrieveEvent = retrieve_event; 
 
             return true;
         }
@@ -313,6 +316,7 @@ namespace ServerEngine.Network.ServerSession
 
             if (null == RecvMessageHandler)
             {
+                Logger.Error($"Error in UserToken.OnRecvCompleteHandler() - RecvMessageHandler is null");
                 return;
             }
 
@@ -328,9 +332,9 @@ namespace ServerEngine.Network.ServerSession
 
                 ArraySegment<byte> recv_buffer;
                 var read_result = RecvMessageHandler.TryGetReadBuffer(out recv_buffer);
-                if (false == read_result)
+                if (false == read_result && null != mConfigNetwork)
                 {
-                    var max_recv_buffer = mConfigNetwork.config_socket.recv_buff_size;
+                    int max_recv_buffer = mConfigNetwork.config_socket.recv_buff_size;
                     RecvMessageHandler.ResetBuffer(new RecvStream(buffer_size: max_recv_buffer), max_recv_buffer);
 
                     RecvMessageHandler.TryGetReadBuffer(out recv_buffer);
@@ -411,16 +415,16 @@ namespace ServerEngine.Network.ServerSession
             }
         }
 
-        public virtual void Dispose(Func<SocketAsyncEventArgs?, SocketAsyncEventArgs?, bool> retrieve_event)
+        public virtual void Dispose()
         {
             if (mDisposed)
                 return;
 
+            // Dispose (close) socket
             Socket.DisconnectSocket();
-            retrieve_event(SendAsyncEvent, RecvAsyncEvent);
-            
-            //SendAsyncEvent?.Dispose();
-            //RecvAsyncEvent?.Dispose();
+
+            // Dispose send/recv socketasynceventargs
+            mRetrieveEvent?.Invoke(SendAsyncEvent, RecvAsyncEvent);
 
             mConnected = false;
             TokenType = eTokenType.None;

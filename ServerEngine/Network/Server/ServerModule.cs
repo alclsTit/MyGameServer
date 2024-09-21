@@ -337,7 +337,7 @@ namespace ServerEngine.Network.Server
                         recv_stream = new RecvStream(Config.config_network.config_socket.recv_buff_size);
                         Logger.Warn($"Warning in ServerModule.OnNewClientCreateHandler() - RecvStream is created by new allocator");
                     }
-                    client_token.Initialize(Logger, Config.config_network, socket, mSendEventArgsPool.Get(), mRecvEventArgsPool.Get(), recv_stream, token_id);
+                    client_token.Initialize(Logger, Config.config_network, socket, mSendEventArgsPool.Get(), mRecvEventArgsPool.Get(), recv_stream, token_id, OnCloseHandler);
 
                     ClientUserTokenManager.TryAddUserToken(token_id, client_token);
 

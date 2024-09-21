@@ -64,12 +64,16 @@ namespace ServerEngine.Network.ServerSession
             return UserTokens.TryAdd(uid, token);
         }
 
-        public bool TryRemoveToken(long uid, Func<SocketAsyncEventArgs?, SocketAsyncEventArgs?, bool> retrieve_event)
+        public bool TryRemoveToken(long uid)
         {
             if (UserTokens.TryGetValue(uid, out var token))
             {
-                token.Dispose(retrieve_event);
+                token.Dispose();
+
+                return true;
             }
+
+            return false;
         }
 
         public async ValueTask Run(int index)
@@ -91,9 +95,10 @@ namespace ServerEngine.Network.ServerSession
 
     public class ClientUserToken : UserToken
     {
+        private bool mDisposed = false;
         public ClientUserToken() : base() { }
 
-        public bool Initialize(Log.ILogger logger, IConfigNetwork config_network, SocketBase socket, SocketAsyncEventArgs send_event_args, SocketAsyncEventArgs recv_event_args, RecvStream recv_stream, long token_id)
+        public bool Initialize(Log.ILogger logger, IConfigNetwork config_network, SocketBase socket, SocketAsyncEventArgs send_event_args, SocketAsyncEventArgs recv_event_args, RecvStream recv_stream, long token_id, Func<SocketAsyncEventArgs?, SocketAsyncEventArgs?, bool> retrieve_event)
         {
             if (null == logger)
                 throw new ArgumentNullException(nameof(logger));
@@ -116,7 +121,7 @@ namespace ServerEngine.Network.ServerSession
             if (0 >= token_id)
                 throw new ArgumentNullException(nameof(token_id));
 
-            if (false == base.InitializeBase(logger, config_network, socket, send_event_args, recv_event_args, recv_stream))
+            if (false == base.InitializeBase(logger, config_network, socket, send_event_args, recv_event_args, recv_stream, retrieve_event))
             {
                 Logger.Error($"Error in ClientUserToken.Initialize() - Fail to Initialize");
                 return false;
@@ -126,6 +131,16 @@ namespace ServerEngine.Network.ServerSession
             base.mTokenId = token_id;
 
             return true;
+        }
+
+        public override void Dispose()
+        {
+            if (mDisposed)
+                return;
+
+            base.Dispose();
+
+            mDisposed = true;
         }
     }
 }

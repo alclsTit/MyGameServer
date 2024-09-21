@@ -38,9 +38,10 @@ namespace ServerEngine.Network.ServerSession
 
     public class ServerUserToken : UserToken
     {
+        private bool mDisposed = false;
         public ServerUserToken() : base() { }
 
-        public bool Initialize(Log.ILogger logger, IConfigNetwork config_network, SocketBase socket, SocketAsyncEventArgs send_event_args, SocketAsyncEventArgs recv_event_args, RecvStream recv_stream)
+        public bool Initialize(Log.ILogger logger, IConfigNetwork config_network, SocketBase socket, SocketAsyncEventArgs send_event_args, SocketAsyncEventArgs recv_event_args, RecvStream recv_stream, Func<SocketAsyncEventArgs?, SocketAsyncEventArgs?, bool> retrieve_event)
         {
             if (null == logger)
                 throw new ArgumentNullException(nameof(logger));
@@ -57,7 +58,7 @@ namespace ServerEngine.Network.ServerSession
             if (null == recv_event_args)
                 throw new ArgumentNullException(nameof(recv_event_args));
 
-            if (false == base.InitializeBase(logger, config_network, socket, send_event_args, recv_event_args, recv_stream))
+            if (false == base.InitializeBase(logger, config_network, socket, send_event_args, recv_event_args, recv_stream, retrieve_event))
             {
                 Logger.Error($"Error in ServerUserToken.Initialize() - Fail to Initialize");
                 return false;
@@ -67,6 +68,16 @@ namespace ServerEngine.Network.ServerSession
 
             return true;
         }
-                
+
+        public override void Dispose()
+        {
+            if (mDisposed)
+                return;
+
+            base.Dispose();
+
+            mDisposed = true;
+        }
+
     }
 }
