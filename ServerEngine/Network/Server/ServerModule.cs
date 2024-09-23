@@ -169,12 +169,12 @@ namespace ServerEngine.Network.Server
                 //pool_default_size = config.config_etc.pools.list.FirstOrDefault(e => e.name.Equals(target, StringComparison.OrdinalIgnoreCase))?.default_size;
 
                 //mSendStreamPool = new SendStreamPoolThread(config.config_network.max_io_thread_count / 2, pool_default_size ?? Utility.MAX_POOL_DEFAULT_SIZE_COMMON, config.config_network.config_socket.send_buff_size);
-                string target = "sendstream";
-                pool_default_size = config.config_etc.pools.list.FirstOrDefault(e => e.name.Equals(target, StringComparison.OrdinalIgnoreCase))?.default_size;
+                //string target = "sendstream";
+                //pool_default_size = config.config_etc.pools.list.FirstOrDefault(e => e.name.Equals(target, StringComparison.OrdinalIgnoreCase))?.default_size;
                 for (int i = 0; i < maximum_retained; ++i)
                 {
-                    mSendStreamPoolQueue.Enqueue(new SendStreamPool(default_size: pool_default_size ?? Utility.MAX_POOL_DEFAULT_SIZE_COMMON, 
-                                                                    send_buffer_size: config.config_network.config_socket.send_buff_size));
+                    mSendStreamPoolStack.Push(new SendStreamPool(default_size: Utility.MAX_USERTOKEN_POOL_DEFAULT_SIZE_COMMON, 
+                                                                 send_buffer_size: config.config_network.config_socket.send_buff_size));
 
                 }
             }
@@ -347,7 +347,7 @@ namespace ServerEngine.Network.Server
                     var peek_send = mSendStreamPoolStack.TryPeek(out send_stream_pool);
                     if (false == peek_send)
                     {
-                        send_stream_pool = new SendStreamPool(default_size: Utility.MAX_POOL_DEFAULT_SIZE_COMMON,
+                        send_stream_pool = new SendStreamPool(default_size: Utility.MAX_USERTOKEN_POOL_DEFAULT_SIZE_COMMON,
                                                               Config.config_network.config_socket.send_buff_size);
                         mSendStreamPoolStack.Push(send_stream_pool);
                         Logger.Warn("Warning in ServerModule.OnNewClientCreateHandler() - SendStreamPool is created by new allocator");

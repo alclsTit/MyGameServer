@@ -111,6 +111,7 @@ namespace ServerEngine.Network.ServerSession
         public SocketAsyncEventArgs? SendAsyncEvent { get; private set; }           // retrieve target
         public SocketAsyncEventArgs? RecvAsyncEvent { get; private set; }           // retrieve target
 
+        // UserToken : 5000, pool_size = 10, send_buffer_size = 4KB > 서버당 204MB
         public SendStreamPool? SendStreamPool { get; private set; }                
         public RecvMessageHandler? RecvMessageHandler { get; private set; }         // retrieve target
         public ProtoParser mProtoParser { get; private set; } = new ProtoParser();
