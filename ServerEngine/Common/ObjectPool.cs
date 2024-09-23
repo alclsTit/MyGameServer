@@ -41,6 +41,11 @@ namespace ServerEngine.Common
 
             base.Return(obj);
         }
+
+        public void ResetCount()
+        {
+            Interlocked.Exchange(ref m_count, 0);
+        }
     }
     #endregion
 

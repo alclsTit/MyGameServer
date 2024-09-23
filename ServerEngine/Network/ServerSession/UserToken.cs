@@ -98,7 +98,7 @@ namespace ServerEngine.Network.ServerSession
         private bool mDisposed = false;
         private volatile bool mConnected = false;
         private IConfigNetwork? mConfigNetwork;
-        private Func<SocketAsyncEventArgs?, SocketAsyncEventArgs?, bool>? mRetrieveEvent;
+        private Func<SocketAsyncEventArgs?, SocketAsyncEventArgs?, SendStreamPool?, bool>? mRetrieveEvent;
 
         #region property
         public long mTokenId { get; protected set; } = 0;
@@ -111,7 +111,7 @@ namespace ServerEngine.Network.ServerSession
         public SocketAsyncEventArgs? SendAsyncEvent { get; private set; }           // retrieve target
         public SocketAsyncEventArgs? RecvAsyncEvent { get; private set; }           // retrieve target
 
-        public SendStream? SendStream { get; protected set; }
+        public SendStreamPool? SendStreamPool { get; private set; }                
         public RecvMessageHandler? RecvMessageHandler { get; private set; }         // retrieve target
         public ProtoParser mProtoParser { get; private set; } = new ProtoParser();
 
@@ -120,7 +120,10 @@ namespace ServerEngine.Network.ServerSession
         public bool Connected => mConnected;
         #endregion
 
-        protected bool InitializeBase(Log.ILogger logger, IConfigNetwork config_network, SocketBase socket, SocketAsyncEventArgs send_event_args, SocketAsyncEventArgs recv_event_args, SendStream send_stream, RecvStream recv_stream, Func<SocketAsyncEventArgs?, SocketAsyncEventArgs?, bool> retrieve_event)
+        protected bool InitializeBase(Log.ILogger logger, IConfigNetwork config_network, SocketBase socket, 
+                                      SocketAsyncEventArgs send_event_args, SocketAsyncEventArgs recv_event_args, 
+                                      SendStreamPool send_stream_pool, RecvStream recv_stream, 
+                                      Func<SocketAsyncEventArgs?, SocketAsyncEventArgs?, SendStreamPool?, bool> retrieve_event)
         {
             this.Socket = socket;
             this.Logger = logger;
@@ -135,7 +138,7 @@ namespace ServerEngine.Network.ServerSession
             var config_socket = config_network.config_socket;
 
             SendQueue = Channel.CreateBounded<ArraySegment<byte>>(capacity: config_socket.send_queue_size);
-            SendStream = send_stream;
+            SendStreamPool = send_stream_pool;
 
             //RecvMessageHandler = new RecvMessageHandler(max_buffer_size: config_socket.recv_buff_size, logger: logger);
             RecvMessageHandler = new RecvMessageHandler(stream: recv_stream, max_buffer_size: config_socket.recv_buff_size, logger: logger);
@@ -155,8 +158,8 @@ namespace ServerEngine.Network.ServerSession
             try
             {
                 ArraySegment<byte> buffer;
-                if (null != SendStream) buffer = mProtoParser.Serialize(message: message, message_id: message_id, send_stream: SendStream);
-                else                    buffer = mProtoParser.Serialize(message: message, message_id: message_id);
+                if (null != SendStreamPool) buffer = mProtoParser.Serialize(message: message, message_id: message_id, send_stream: SendStreamPool.Get());
+                else                        buffer = mProtoParser.Serialize(message: message, message_id: message_id);
 
                 await StartSendAsync(ref buffer, canel_token);
             }
@@ -174,8 +177,8 @@ namespace ServerEngine.Network.ServerSession
             try
             {
                 ArraySegment<byte> buffer;
-                if (null != SendStream) buffer = mProtoParser.Serialize(message: message, message_id: message_id, send_stream: SendStream);
-                else                    buffer = mProtoParser.Serialize(message: message, message_id: message_id);
+                if (null != SendStreamPool) buffer = mProtoParser.Serialize(message: message, message_id: message_id, send_stream: SendStreamPool.Get());
+                else                        buffer = mProtoParser.Serialize(message: message, message_id: message_id);
 
                 return StartSend(ref buffer);
             }
@@ -434,7 +437,7 @@ namespace ServerEngine.Network.ServerSession
             Socket.DisconnectSocket();
 
             // Dispose send/recv socketasynceventargs
-            mRetrieveEvent?.Invoke(SendAsyncEvent, RecvAsyncEvent);
+            mRetrieveEvent?.Invoke(SendAsyncEvent, RecvAsyncEvent, SendStreamPool);
 
             mConnected = false;
             TokenType = eTokenType.None;

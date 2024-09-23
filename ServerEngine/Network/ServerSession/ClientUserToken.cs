@@ -100,8 +100,8 @@ namespace ServerEngine.Network.ServerSession
 
         public bool Initialize(Log.ILogger logger, IConfigNetwork config_network, SocketBase socket, 
                               SocketAsyncEventArgs send_event_args, SocketAsyncEventArgs recv_event_args, 
-                              SendStream send_stream, RecvStream recv_stream, 
-                              long token_id, Func<SocketAsyncEventArgs?, SocketAsyncEventArgs?, bool> retrieve_event)
+                              SendStreamPool? send_stream_pool, RecvStream recv_stream, 
+                              long token_id, Func<SocketAsyncEventArgs?, SocketAsyncEventArgs?, SendStreamPool?, bool> retrieve_event)
         {
             if (null == logger)
                 throw new ArgumentNullException(nameof(logger));
@@ -118,8 +118,8 @@ namespace ServerEngine.Network.ServerSession
             if (null == recv_event_args)
                 throw new ArgumentNullException(nameof(recv_event_args));
 
-            if (null == send_stream)
-                throw new ArgumentNullException (nameof(send_stream));  
+            if (null == send_stream_pool)
+                throw new ArgumentNullException (nameof(send_stream_pool));  
 
             if (null == recv_stream)
                 throw new ArgumentNullException(nameof(recv_stream));
@@ -130,7 +130,9 @@ namespace ServerEngine.Network.ServerSession
             if (null == retrieve_event)
                 throw new ArgumentNullException(nameof(retrieve_event));
 
-            if (false == base.InitializeBase(logger, config_network, socket, send_event_args, recv_event_args, send_stream, recv_stream, retrieve_event))
+            if (false == base.InitializeBase(logger, config_network, socket, 
+                                             send_event_args, recv_event_args, 
+                                             send_stream_pool, recv_stream, retrieve_event))
             {
                 Logger.Error($"Error in ClientUserToken.Initialize() - Fail to Initialize");
                 return false;

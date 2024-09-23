@@ -17,6 +17,7 @@ using Microsoft.Extensions.ObjectPool;
 using System.Diagnostics.CodeAnalysis;
 using ServerEngine.Network.Message;
 using System.Linq.Expressions;
+using System.Collections.Concurrent;
 
 namespace ServerEngine.Network.Server
 {
@@ -64,8 +65,8 @@ namespace ServerEngine.Network.Server
         /// </summary>
         protected DisposableObjectPool<SocketAsyncEventArgs> mSendEventArgsPool, mRecvEventArgsPool;
         private DisposableObjectPool<ClientUserToken> mClientUserTokenPool;
-        private RecvStreamPool mRecvStreamPool;
-        private SendStreamPool mSendStreamPool;
+        private RecvStreamPoolThread mRecvStreamPool;
+        private ConcurrentStack<SendStreamPool> mSendStreamPoolStack = new ConcurrentStack<SendStreamPool>();
 
         #region "2022.05.04 기존 커스텀 ObjectPool -> Microsoft.Extensions.ObjectPool로 변경에 따른 코드 주석처리"
         /*
@@ -162,12 +163,20 @@ namespace ServerEngine.Network.Server
 
             mClientUserTokenPool = new DisposableObjectPool<ClientUserToken>(new DefaultPooledObjectPolicy<ClientUserToken>(), maximum_retained);
 
-            // Set SendStream ObjectPool
+            // Set SendStreamPool ObjectPool
             {
+                //string target = "sendstream";
+                //pool_default_size = config.config_etc.pools.list.FirstOrDefault(e => e.name.Equals(target, StringComparison.OrdinalIgnoreCase))?.default_size;
+
+                //mSendStreamPool = new SendStreamPoolThread(config.config_network.max_io_thread_count / 2, pool_default_size ?? Utility.MAX_POOL_DEFAULT_SIZE_COMMON, config.config_network.config_socket.send_buff_size);
                 string target = "sendstream";
                 pool_default_size = config.config_etc.pools.list.FirstOrDefault(e => e.name.Equals(target, StringComparison.OrdinalIgnoreCase))?.default_size;
+                for (int i = 0; i < maximum_retained; ++i)
+                {
+                    mSendStreamPoolQueue.Enqueue(new SendStreamPool(default_size: pool_default_size ?? Utility.MAX_POOL_DEFAULT_SIZE_COMMON, 
+                                                                    send_buffer_size: config.config_network.config_socket.send_buff_size));
 
-                mSendStreamPool = new SendStreamPool(config.config_network.max_io_thread_count / 2, pool_default_size ?? Utility.MAX_POOL_DEFAULT_SIZE_COMMON, config.config_network.config_socket.send_buff_size);
+                }
             }
 
             // Set RecvStream ObjectPool
@@ -175,7 +184,9 @@ namespace ServerEngine.Network.Server
                 string target = "recvstream";
                 pool_default_size = config.config_etc.pools.list.FirstOrDefault(e => e.name.Equals(target, StringComparison.OrdinalIgnoreCase))?.default_size;
 
-                mRecvStreamPool = new RecvStreamPool(config.config_network.max_io_thread_count / 2, pool_default_size ?? Utility.MAX_POOL_DEFAULT_SIZE_COMMON, config.config_network.config_socket.recv_buff_size);
+                mRecvStreamPool = new RecvStreamPoolThread(max_worker_count: config.config_network.max_io_thread_count / 2, 
+                                                           default_size: pool_default_size ?? Utility.MAX_POOL_DEFAULT_SIZE_COMMON, 
+                                                           recv_buffer_size: config.config_network.config_socket.recv_buff_size);
             }
 
             // Client에서 접속해서 생성된 UserToken 관리
@@ -332,12 +343,20 @@ namespace ServerEngine.Network.Server
                     socket.SetConnect(SocketBase.eConnectState.Connected);
 
                     // send 
-                    var send_stream = mSendStreamPool.Get();
-                    if (null == send_stream)
+                    SendStreamPool? send_stream_pool = null;
+                    var peek_send = mSendStreamPoolStack.TryPeek(out send_stream_pool);
+                    if (false == peek_send)
                     {
-                        send_stream = new SendStream(Config.config_network.config_socket.send_buff_size);
-                        Logger.Warn($"Warning in ServerModule.OnNewClientCreateHandler() - SendStream is created by new allocator");
+                        send_stream_pool = new SendStreamPool(default_size: Utility.MAX_POOL_DEFAULT_SIZE_COMMON,
+                                                              Config.config_network.config_socket.send_buff_size);
+                        mSendStreamPoolStack.Push(send_stream_pool);
+                        Logger.Warn("Warning in ServerModule.OnNewClientCreateHandler() - SendStreamPool is created by new allocator");
                     }
+                    else
+                    {
+                        mSendStreamPoolStack.TryPop(out send_stream_pool);
+                    } 
+                    
                     // receive
                     var recv_stream = mRecvStreamPool.Get();
                     if (null == recv_stream)
@@ -345,7 +364,9 @@ namespace ServerEngine.Network.Server
                         recv_stream = new RecvStream(Config.config_network.config_socket.recv_buff_size);
                         Logger.Warn($"Warning in ServerModule.OnNewClientCreateHandler() - RecvStream is created by new allocator");
                     }
-                    client_token.Initialize(Logger, Config.config_network, socket, mSendEventArgsPool.Get(), mRecvEventArgsPool.Get(), recv_stream, token_id, OnCloseHandler);
+                    client_token.Initialize(Logger, Config.config_network, socket, 
+                                            mSendEventArgsPool.Get(), mRecvEventArgsPool.Get(), 
+                                            send_stream_pool, recv_stream, token_id, OnCloseTokenHandler);
 
                     ClientUserTokenManager.TryAddUserToken(token_id, client_token);
 
@@ -386,13 +407,19 @@ namespace ServerEngine.Network.Server
             }
         }
 
-        public bool OnCloseHandler(SocketAsyncEventArgs? send_event_args, SocketAsyncEventArgs? recv_event_args)
+        public bool OnCloseTokenHandler(SocketAsyncEventArgs? send_event_args, SocketAsyncEventArgs? recv_event_args, SendStreamPool? send_stream_pool)
         {
             if (null != send_event_args)
                 mSendEventArgsPool.Return(send_event_args);
 
             if (null != recv_event_args)
                 mRecvEventArgsPool.Return(recv_event_args);
+
+            if (null != send_stream_pool)
+            {
+                send_stream_pool.Reset();
+                mSendStreamPoolStack.Push(send_stream_pool);
+            }
 
             return true;
         }

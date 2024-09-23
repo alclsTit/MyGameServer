@@ -4,7 +4,9 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics.Tracing;
 using System.Linq;
+using System.Security;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Microsoft.Extensions.ObjectPool;
 using ServerEngine.Common;
@@ -72,6 +74,7 @@ namespace ServerEngine.Network.Message
 
     public class SendStream : Stream
     {
+        public int Offset { get; set; }
         public SendStream(int buffer_size) 
             : base(buffer_size) 
         { 
@@ -89,27 +92,73 @@ namespace ServerEngine.Network.Message
 
     #region StreamPool
     /// <summary>
-    /// StreamPool의 크기 조정은 외부에서 가능하나, 실시간 리로드가 안되도록 구조설계. 위험성존재
+    /// 하나의 Send / Recv StreamPool
     /// </summary>
     /// <typeparam name="TStream"></typeparam>
     public abstract class StreamPool<TStream> where TStream : class, IStream
     {
-        private static volatile int mShareCount;
+        private int mDefaultSize;
+        private IPooledObjectPolicy<TStream> mObjectPoolPolicy;
+        private NonDisposableObjectPool<TStream> mObjectPool;
+
         #region property
-        public int MaxWorkerCount { get; private set; }
-        public int Capacity { get; private set; }
-        public int CapacityPerThread { get; private set; }
-        public ConcurrentDictionary<int, NonDisposableObjectPool<TStream>> mObjectPoolList { get; private set; } = new ConcurrentDictionary<int, NonDisposableObjectPool<TStream>>();
+        public int Capacity => mObjectPool.Capacity;
+        public int Count => mObjectPool.Count;
         #endregion
 
-        protected StreamPool(int max_worker_count, int default_size, IPooledObjectPolicy<TStream> policy)
+        public StreamPool(int default_size, IPooledObjectPolicy<TStream> policy)
+        {
+            mDefaultSize = default_size;
+            mObjectPoolPolicy = policy;
+            mObjectPool = new NonDisposableObjectPool<TStream>(policy: policy, maxiumRetained: default_size);
+        }
+
+        public virtual TStream Get()
+        {
+            return mObjectPool.Get();
+        }
+
+        public virtual void Return(TStream stream)
+        {
+            if (null == stream)
+                return;
+
+            stream.Reset();
+            mObjectPool.Return(stream);
+        }
+
+        public virtual void Reset()
+        {
+            mObjectPool.ResetCount();
+
+            mObjectPool = new NonDisposableObjectPool<TStream>(policy: mObjectPoolPolicy, maxiumRetained: mDefaultSize);
+        }
+    }
+
+
+    /// <summary>
+    /// Thread 별로 할당하여 사용하는 SendStreamPool / RecvStreamPool
+    /// StreamPool의 크기 조정은 외부에서 가능하나, 실시간 리로드가 안되도록 구조설계. 위험성존재
+    /// </summary>
+    /// <typeparam name="TStream"></typeparam>
+    public abstract class StreamPoolThread<TStream> where TStream : class, IStream
+    {
+        private static volatile int mShareCount;
+       
+        private ConcurrentDictionary<int, NonDisposableObjectPool<TStream>> mObjectPoolList = new ConcurrentDictionary<int, NonDisposableObjectPool<TStream>>();
+        
+        #region property
+        public int MaxWorkerCount { get; private set; }
+        public int CapacityPerThread { get; private set; }
+        #endregion
+
+        protected StreamPoolThread(int max_worker_count, int default_size, IPooledObjectPolicy<TStream> policy)
         {
             MaxWorkerCount = max_worker_count;
-            Capacity = default_size;
             CapacityPerThread = (int)(default_size / max_worker_count);
 
             for (int i = 1; i <= max_worker_count; ++i)
-                mObjectPoolList.TryAdd(i, new NonDisposableObjectPool<TStream>(policy, default_size));
+                mObjectPoolList.TryAdd(i, new NonDisposableObjectPool<TStream>(policy: policy, maxiumRetained: default_size));
         }
 
         private bool CheckIndexRange(int index)
@@ -139,30 +188,54 @@ namespace ServerEngine.Network.Message
             return stream;
         }
 
-        public virtual void Return(TStream obj)
+        public virtual void Return(TStream stream)
         {
-            var index = obj.Tag;
+            if (null == stream)
+                return;
+
+            var index = stream.Tag;
             if (!CheckIndexRange(index))
                 return;
 
-            obj.Reset();
-            mObjectPoolList[index].Return(obj);
+            stream.Reset();
+            mObjectPoolList[index].Return(stream);
         }
 
-        public virtual void Return(int index, TStream obj)
+        public virtual void Return(int index, TStream stream)
         {
+            if (null == stream)
+                return;
+
             if (!CheckIndexRange(index))
                 return;
 
-            obj.Reset();
-            mObjectPoolList[index].Return(obj);
+            stream.Reset();
+            mObjectPoolList[index].Return(stream);
+        }
+
+        public int Capacity(int index)
+        {
+            return mObjectPoolList[index].Capacity;
+        }
+
+        public int Count(int index)
+        {
+            return mObjectPoolList[index].Count;
         }
         #endregion
     }
 
     public sealed class RecvStreamPool : StreamPool<RecvStream>
     {
-        public RecvStreamPool(int max_worker_count, int default_size, int recv_buffer_size) 
+        public RecvStreamPool(int default_size, int recv_buffer_size)
+            : base(default, new RecvStreamObjectPoolPolicy(recv_buffer_size))
+        {
+        }
+    }
+
+    public sealed class RecvStreamPoolThread : StreamPoolThread<RecvStream>
+    {
+        public RecvStreamPoolThread(int max_worker_count, int default_size, int recv_buffer_size) 
             : base(max_worker_count, default_size, new RecvStreamObjectPoolPolicy(recv_buffer_size))
         {
         }
@@ -170,7 +243,15 @@ namespace ServerEngine.Network.Message
 
     public sealed class SendStreamPool : StreamPool<SendStream>
     {
-        public SendStreamPool(int max_worker_count, int default_size, int send_buffer_size) 
+        public SendStreamPool(int default_size, int send_buffer_size)
+            : base(default, new SendStreamObjectPoolPolicy(send_buffer_size))
+        {
+        }
+    }
+
+    public sealed class SendStreamPoolThread : StreamPoolThread<SendStream>
+    {
+        public SendStreamPoolThread(int max_worker_count, int default_size, int send_buffer_size) 
             : base(max_worker_count, default_size, new SendStreamObjectPoolPolicy(send_buffer_size))
         {
         }
