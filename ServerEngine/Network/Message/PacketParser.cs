@@ -48,7 +48,7 @@ namespace ServerEngine.Network.Message
             }
         }
 
-        public ArraySegment<byte> Serialize<TMessage>(TMessage message, ushort message_id, SendStream send_stream) where TMessage : IMessage
+        public ArraySegment<byte> Serialize<TMessage>(TMessage message, ushort message_id, SendStream stream) where TMessage : IMessage
         {
             if (null == message)
                 throw new ArgumentNullException(nameof(message));
@@ -56,9 +56,9 @@ namespace ServerEngine.Network.Message
             if (0 > message_id || Utility.MAX_PACKET_DEFINITION_SIZE < message_id)
                 throw new ArgumentOutOfRangeException(nameof(message_id));
 
-            if (null == send_stream.Buffer.Array)
-                throw new ArgumentNullException(nameof(send_stream.Buffer.Array));
-
+            if (null == stream.Buffer.Array)
+                throw new ArgumentNullException(nameof(stream.Buffer.Array));
+            
             try
             {
                 var header_size = Utility.MAX_PACKET_HEADER_SIZE + Utility.MAX_PACKET_HEADER_TYPE;
@@ -66,21 +66,55 @@ namespace ServerEngine.Network.Message
                 var packet_size = header_size + body_size;
                 int offset = 0;
 
-                Buffer.BlockCopy(BitConverter.GetBytes(header_size), 0, send_stream.Buffer.Array, offset, Utility.MAX_PACKET_HEADER_SIZE);
+                Buffer.BlockCopy(BitConverter.GetBytes(header_size), 0, stream.Buffer.Array, offset, Utility.MAX_PACKET_HEADER_SIZE);
                 offset += Utility.MAX_PACKET_HEADER_SIZE;
 
-                Buffer.BlockCopy(BitConverter.GetBytes(message_id), 0, send_stream.Buffer.Array, offset, Utility.MAX_PACKET_HEADER_TYPE);
+                Buffer.BlockCopy(BitConverter.GetBytes(message_id), 0, stream.Buffer.Array, offset, Utility.MAX_PACKET_HEADER_TYPE);
                 offset += Utility.MAX_PACKET_HEADER_TYPE;
 
-                Buffer.BlockCopy(message.ToByteArray(), 0, send_stream.Buffer.Array, offset, body_size);
+                Buffer.BlockCopy(message.ToByteArray(), 0, stream.Buffer.Array, offset, body_size);
 
-                return send_stream.Buffer;
+                return stream.Buffer;
             }
             catch (Exception )
             {
                 throw;
             }          
         }
+
+        public bool TrySerialize<TMessage>(TMessage message, ushort message_id, SendStream stream, int offset = 0) where TMessage: IMessage
+        {
+            if (null == message)
+                throw new ArgumentNullException(nameof(message));
+
+            if (0 > message_id || Utility.MAX_PACKET_DEFINITION_SIZE < message_id)
+                throw new ArgumentOutOfRangeException(nameof(message_id));
+
+            if (null == stream.Buffer.Array)
+                throw new ArgumentNullException(nameof(stream.Buffer.Array));
+
+            try
+            {
+                var header_size = Utility.MAX_PACKET_HEADER_SIZE + Utility.MAX_PACKET_HEADER_TYPE;
+                var body_size = message.CalculateSize();
+                var packet_size = header_size + body_size;
+
+                Buffer.BlockCopy(BitConverter.GetBytes(header_size), 0, stream.Buffer.Array, offset, Utility.MAX_PACKET_HEADER_SIZE);
+                offset += Utility.MAX_PACKET_HEADER_SIZE;
+
+                Buffer.BlockCopy(BitConverter.GetBytes(message_id), 0, stream.Buffer.Array, offset, Utility.MAX_PACKET_HEADER_TYPE);
+                offset += Utility.MAX_PACKET_HEADER_TYPE;
+
+                Buffer.BlockCopy(message.ToByteArray(), 0, stream.Buffer.Array, offset, body_size);
+
+                return true;
+            }
+            catch (Exception)
+            {
+                throw;
+            }
+        }
+
 
         // proto 파일 컨버팅시 생성되는 message는 기본생성자를 포함하고 있다 > new() 제약조건 가능 
         public TMessage Deserialize<TMessage>(ref ArraySegment<byte> buffer) where TMessage : IMessage<TMessage>, new()

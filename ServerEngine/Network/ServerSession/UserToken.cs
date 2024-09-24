@@ -104,7 +104,7 @@ namespace ServerEngine.Network.ServerSession
         public long mTokenId { get; protected set; } = 0;
         public eTokenType TokenType { get; protected set; } = eTokenType.None;
 
-        protected Channel<ArraySegment<byte>>? SendQueue { get; private set; }
+        protected Channel<SendStream>? SendQueue { get; private set; }
         public SocketBase Socket { get; protected set; }
         public Log.ILogger Logger { get; private set; }
 
@@ -138,7 +138,7 @@ namespace ServerEngine.Network.ServerSession
 
             var config_socket = config_network.config_socket;
 
-            SendQueue = Channel.CreateBounded<ArraySegment<byte>>(capacity: config_socket.send_queue_size);
+            SendQueue = Channel.CreateBounded<SendStream>(capacity: config_socket.send_queue_size);
             SendStreamPool = send_stream_pool;
 
             //RecvMessageHandler = new RecvMessageHandler(max_buffer_size: config_socket.recv_buff_size, logger: logger);
@@ -156,13 +156,32 @@ namespace ServerEngine.Network.ServerSession
         public virtual async ValueTask SendAsync<TMessage>(TMessage message, ushort message_id, CancellationToken canel_token) 
             where TMessage : IMessage
         {
+            if (null == SendStreamPool)
+            {
+                Logger.Error($"Error in UserToken.SendAsync() - SendStreamPool is null");
+                return;
+            }
+
             try
             {
-                ArraySegment<byte> buffer;
-                if (null != SendStreamPool) buffer = mProtoParser.Serialize(message: message, message_id: message_id, send_stream: SendStreamPool.Get());
-                else                        buffer = mProtoParser.Serialize(message: message, message_id: message_id);
+                //ArraySegment<byte> buffer;
+                //if (null != SendStreamPool) buffer = mProtoParser.Serialize(message: message, message_id: message_id, send_stream: SendStreamPool.Get());
+                //else                        buffer = mProtoParser.Serialize(message: message, message_id: message_id);
 
-                await StartSendAsync(ref buffer, canel_token);
+                //await StartSendAsync(ref buffer, canel_token);
+
+                SendStream stream = SendStreamPool.Get();
+                if (mProtoParser.TrySerialize(message: message,
+                                              message_id: message_id,        
+                                              stream: stream))
+                {
+                    await StartSendAsync(stream: stream, cancel_token: canel_token);
+                }
+                else
+                {
+                    Logger.Error($"Error in UserToken.SendAsync() - Fail to Serialize");
+                    return;
+                }
             }
             catch (Exception ex)
             {
@@ -175,13 +194,32 @@ namespace ServerEngine.Network.ServerSession
         public virtual bool Send<TMessage>(TMessage message, ushort message_id) 
             where TMessage: IMessage
         {
+            if (null == SendStreamPool)
+            {
+                Logger.Error($"Error in UserToken.Send() - SendStreamPool is null");
+                return false;
+            }
+
             try
             {
-                ArraySegment<byte> buffer;
-                if (null != SendStreamPool) buffer = mProtoParser.Serialize(message: message, message_id: message_id, send_stream: SendStreamPool.Get());
-                else                        buffer = mProtoParser.Serialize(message: message, message_id: message_id);
+                //ArraySegment<byte> buffer;
+                //if (null != SendStreamPool) buffer = mProtoParser.Serialize(message: message, message_id: message_id, send_stream: SendStreamPool.Get());
+                //else                        buffer = mProtoParser.Serialize(message: message, message_id: message_id);
 
-                return StartSend(ref buffer);
+                //return StartSend(ref buffer);
+
+                SendStream stream = SendStreamPool.Get();
+                if (mProtoParser.TrySerialize(message: message,
+                                              message_id: message_id,
+                                              stream: stream))
+                {
+                    return StartSend(stream);
+                }
+                else
+                {
+                    Logger.Error($"Error in UserToken.Send() - Fail to Serialize");
+                    return false;
+                }
             }
             catch (Exception ex)
             {
@@ -191,9 +229,9 @@ namespace ServerEngine.Network.ServerSession
         }
 
         // 여러 스레드에서 호출. 패킷 send 진행 시 큐에 동기로 데이터 추가
-        private bool StartSend(ref ArraySegment<byte> buffer)
+        private bool StartSend(SendStream stream /* ref ArraySegment<byte> buffer */)
         {
-            if (null == buffer.Array) 
+            /*if (null == buffer.Array) 
                 throw new ArgumentNullException(nameof(buffer));
 
             if (null == SendQueue)
@@ -203,12 +241,24 @@ namespace ServerEngine.Network.ServerSession
                 Logger.Error($"Error in UserToken.StartSend() - Fail to update send state [sending]");
 
             return SendQueue.Writer.TryWrite(buffer);
+            */
+
+            if (null == stream.Buffer.Array)
+                throw new ArgumentNullException(nameof(stream.Buffer.Array));
+
+            if (null == SendQueue)
+                throw new NullReferenceException(nameof(SendQueue));
+
+            if (false == Socket.UpdateState(SocketBase.eSocketState.Sending))
+                Logger.Error($"Error in UserToken.StartSend() - Fail to update send state [sending]");
+
+            return SendQueue.Writer.TryWrite(stream);
         }
 
         // 여러 스레드에서 호출. 패킷 send 진행 시 큐에 비동기로 데이터 추가
-        private ValueTask StartSendAsync(ref ArraySegment<byte> buffer, CancellationToken cancel_token)
+        private ValueTask StartSendAsync(SendStream stream, /*ref ArraySegment<byte> buffer*/ CancellationToken cancel_token)
         {
-            if (null == buffer.Array) 
+            /*if (null == buffer.Array) 
                 throw new ArgumentNullException(nameof(buffer));
 
             if (null == SendQueue)
@@ -218,6 +268,19 @@ namespace ServerEngine.Network.ServerSession
                 Logger.Error($"Error in UserToken.StartSendAsync() - Fail to update send state [sending]");
 
             return SendQueue.Writer.WriteAsync(buffer, cancel_token);
+            */
+
+            if (null == stream.Buffer.Array)
+                throw new ArgumentNullException(nameof(stream.Buffer.Array));
+
+            if (null == SendQueue)
+                throw new NullReferenceException(nameof(SendQueue));
+
+            if (false == Socket.UpdateState(SocketBase.eSocketState.Sending))
+                Logger.Error($"Error in UserToken.StartSendAsync() - Fail to update send state [sending]");
+
+            return SendQueue.Writer.WriteAsync(stream, cancel_token);
+
         }
 
         // 별도의 패킷 처리 스레드에서 호출. 큐잉된 패킷 데이터들에 대한 실질적인 비동기 send 진행
@@ -235,7 +298,7 @@ namespace ServerEngine.Network.ServerSession
             SendQueue.Writer.Complete();
             await foreach(var item in SendQueue.Reader.ReadAllAsync())
             {
-                SendAsyncEvent.BufferList?.Add(item);
+                SendAsyncEvent.BufferList?.Add(item.Buffer);
             }
 
             var pending = Socket.GetSocket?.SendAsync(SendAsyncEvent);
@@ -258,6 +321,10 @@ namespace ServerEngine.Network.ServerSession
                     return;
                 }
 
+                if (null != e.BufferList)
+                {
+
+                }
 
             }
             catch (Exception ex) 
