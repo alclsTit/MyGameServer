@@ -94,6 +94,7 @@ namespace ServerEngine.Network.ServerSession
             Server
         }
 
+        private IConfigSocket? mConfigSocket;
         private IPEndPoint? mLocalEndPoint;
         private IPEndPoint? mRemoteEndPoint;
         private bool mDisposed = false;
@@ -140,13 +141,13 @@ namespace ServerEngine.Network.ServerSession
             SendAsyncEvent = send_event_args;
             RecvAsyncEvent = recv_event_args;
 
-            var config_socket = config_network.config_socket;
+            mConfigSocket = config_network.config_socket;
 
-            SendQueue = Channel.CreateBounded<SendStream>(capacity: config_socket.send_queue_size);
+            SendQueue = Channel.CreateBounded<SendStream>(capacity: config_network.config_socket.send_queue_size);
             SendStreamPool = send_stream_pool;
 
             //RecvMessageHandler = new RecvMessageHandler(max_buffer_size: config_socket.recv_buff_size, logger: logger);
-            RecvMessageHandler = new RecvMessageHandler(stream: recv_stream, max_buffer_size: config_socket.recv_buff_size, logger: logger);
+            RecvMessageHandler = new RecvMessageHandler(stream: recv_stream, max_buffer_size: config_network.config_socket.recv_buff_size, logger: logger);
 
             mConnected = true;
 
@@ -239,17 +240,16 @@ namespace ServerEngine.Network.ServerSession
                 while(!mSendBackupQueue.IsEmpty)
                 {
                     SendStream? backup_stream = null;
-                    if (mSendBackupQueue.TryPeek(out backup_stream))
+                    if (mSendBackupQueue.TryDequeue(out backup_stream))
                     {
                         if (!SendQueue.Writer.TryWrite(item: backup_stream))
                         {
                             Logger.Warn($"Warning in UserToken.StartSend() - Fail to Channel.Writer.TryWrite()." +
                                         $" backup_stream = {Newtonsoft.Json.JsonConvert.SerializeObject(backup_stream, Newtonsoft.Json.Formatting.Indented)}");
+
+                            Task.Delay(5).Wait();
+                            mSendBackupQueue.Enqueue(backup_stream);
                             continue;
-                        }
-                        else
-                        {
-                            mSendBackupQueue.TryDequeue(out backup_stream);
                         }
                     }
                 }
@@ -260,7 +260,7 @@ namespace ServerEngine.Network.ServerSession
                     mSendBackupQueue.Enqueue(stream);
                     
                     Logger.Warn($"Warning in UserToken.StartSend() - Fail to Channel.Writer.TryWrite()." +
-                        $" stream = {Newtonsoft.Json.JsonConvert.SerializeObject(stream, Newtonsoft.Json.Formatting.Indented)}");               
+                                $" stream = {Newtonsoft.Json.JsonConvert.SerializeObject(stream, Newtonsoft.Json.Formatting.Indented)}");               
                 }
             }
             else
@@ -302,6 +302,8 @@ namespace ServerEngine.Network.ServerSession
                         {
                             Logger.Warn($"Warning in UserToken.StartSendAsync() - Fail to Channel.Writer.WriteAsync(). exception = {ex.Message}." +
                                         $"backup_stream = {Newtonsoft.Json.JsonConvert.SerializeObject(backup_stream, Newtonsoft.Json.Formatting.Indented)}. stack_trace = {ex.StackTrace}");
+
+                            Task.Delay(5).WaitAsync(cancellationToken: cancel_token);
                         }
                     }
                 }
@@ -346,7 +348,12 @@ namespace ServerEngine.Network.ServerSession
                 await foreach(var item in SendQueue.Reader.ReadAllAsync())
                     SendAsyncEvent.BufferList?.Add(item.Buffer);
 
-                mCompleteFlag = 0;
+                //channel의 complete 호출시 해당 channl을 재사용하는것이 아닌 새로운 channel을 생성하여 이후로직을 처리하는것이 권고된다
+                //mCompleteFlag = 0;
+                if (null != mConfigSocket)
+                    SendQueue = Channel.CreateBounded<SendStream>(capacity: mConfigSocket.send_buff_size);
+                else
+                    SendQueue = Channel.CreateBounded<SendStream>(capacity: Utility.MAX_SEND_BUFFER_SIZE_COMMON);
 
                 var pending = Socket.GetSocket?.SendAsync(SendAsyncEvent);
                 if (false == pending)
