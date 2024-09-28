@@ -6,6 +6,7 @@ using ServerEngine.Config;
 using ServerEngine.Network.Message;
 using ServerEngine.Network.SystemLib;
 using Google.Protobuf;
+using System.Collections.Concurrent;
 
 namespace ServerEngine.Network.ServerSession
 {
@@ -98,6 +99,8 @@ namespace ServerEngine.Network.ServerSession
         private bool mDisposed = false;
         private volatile bool mConnected = false;
         private IConfigNetwork? mConfigNetwork;
+        private volatile int mCompleteFlag = 0; // 0: false / 1: true
+        private ConcurrentQueue<SendStream> mSendBackupQueue = new ConcurrentQueue<SendStream>();
         private Func<SocketAsyncEventArgs?, SocketAsyncEventArgs?, SendStreamPool?, bool>? mRetrieveEvent;
 
         #region property
@@ -112,7 +115,8 @@ namespace ServerEngine.Network.ServerSession
         public SocketAsyncEventArgs? RecvAsyncEvent { get; private set; }           // retrieve target
 
         // UserToken : 5000, pool_size = 10, send_buffer_size = 4KB > 서버당 204MB
-        public SendStreamPool? SendStreamPool { get; private set; }                
+        public SendStreamPool? SendStreamPool { get; private set; }         
+     
         public RecvMessageHandler? RecvMessageHandler { get; private set; }         // retrieve target
         public ProtoParser mProtoParser { get; private set; } = new ProtoParser();
 
@@ -164,12 +168,6 @@ namespace ServerEngine.Network.ServerSession
 
             try
             {
-                //ArraySegment<byte> buffer;
-                //if (null != SendStreamPool) buffer = mProtoParser.Serialize(message: message, message_id: message_id, send_stream: SendStreamPool.Get());
-                //else                        buffer = mProtoParser.Serialize(message: message, message_id: message_id);
-
-                //await StartSendAsync(ref buffer, canel_token);
-
                 SendStream stream = SendStreamPool.Get();
                 if (mProtoParser.TrySerialize(message: message,
                                               message_id: message_id,        
@@ -202,12 +200,6 @@ namespace ServerEngine.Network.ServerSession
 
             try
             {
-                //ArraySegment<byte> buffer;
-                //if (null != SendStreamPool) buffer = mProtoParser.Serialize(message: message, message_id: message_id, send_stream: SendStreamPool.Get());
-                //else                        buffer = mProtoParser.Serialize(message: message, message_id: message_id);
-
-                //return StartSend(ref buffer);
-
                 SendStream stream = SendStreamPool.Get();
                 if (mProtoParser.TrySerialize(message: message,
                                               message_id: message_id,
@@ -229,61 +221,112 @@ namespace ServerEngine.Network.ServerSession
         }
 
         // 여러 스레드에서 호출. 패킷 send 진행 시 큐에 동기로 데이터 추가
-        private bool StartSend(SendStream stream /* ref ArraySegment<byte> buffer */)
+        // SocketAsyncEventArgs 비동기 객체를 사용하지 않음
+        private bool StartSend(SendStream stream)
         {
-            /*if (null == buffer.Array) 
-                throw new ArgumentNullException(nameof(buffer));
-
-            if (null == SendQueue)
-                throw new NullReferenceException(nameof(SendQueue));
-
-            if (false == Socket.UpdateState(SocketBase.eSocketState.Sending))
-                Logger.Error($"Error in UserToken.StartSend() - Fail to update send state [sending]");
-
-            return SendQueue.Writer.TryWrite(buffer);
-            */
-
             if (null == stream.Buffer.Array)
                 throw new ArgumentNullException(nameof(stream.Buffer.Array));
 
             if (null == SendQueue)
                 throw new NullReferenceException(nameof(SendQueue));
 
-            if (false == Socket.UpdateState(SocketBase.eSocketState.Sending))
+            if (!Socket.UpdateState(SocketBase.eSocketState.Sending))
                 Logger.Error($"Error in UserToken.StartSend() - Fail to update send state [sending]");
 
-            return SendQueue.Writer.TryWrite(stream);
+            // mCompleteFlag = false 일 때만 queue에 데이터 추가
+            if (0 == Interlocked.CompareExchange(ref mCompleteFlag, 0, 0))
+            {
+                while(!mSendBackupQueue.IsEmpty)
+                {
+                    SendStream? backup_stream = null;
+                    if (mSendBackupQueue.TryPeek(out backup_stream))
+                    {
+                        if (!SendQueue.Writer.TryWrite(item: backup_stream))
+                        {
+                            Logger.Warn($"Warning in UserToken.StartSend() - Fail to Channel.Writer.TryWrite()." +
+                                        $" backup_stream = {Newtonsoft.Json.JsonConvert.SerializeObject(backup_stream, Newtonsoft.Json.Formatting.Indented)}");
+                            continue;
+                        }
+                        else
+                        {
+                            mSendBackupQueue.TryDequeue(out backup_stream);
+                        }
+                    }
+                }
+
+                if (!SendQueue.Writer.TryWrite(item: stream))
+                {
+                    // channel에 데이터 추가가 실패하면 backup queue에 추가하여 이후에 처리한다
+                    mSendBackupQueue.Enqueue(stream);
+                    
+                    Logger.Warn($"Warning in UserToken.StartSend() - Fail to Channel.Writer.TryWrite()." +
+                        $" stream = {Newtonsoft.Json.JsonConvert.SerializeObject(stream, Newtonsoft.Json.Formatting.Indented)}");               
+                }
+            }
+            else
+            {
+                mSendBackupQueue.Enqueue(stream);
+            }
+            
+            return true;
         }
 
         // 여러 스레드에서 호출. 패킷 send 진행 시 큐에 비동기로 데이터 추가
-        private ValueTask StartSendAsync(SendStream stream, /*ref ArraySegment<byte> buffer*/ CancellationToken cancel_token)
+        // SocketAsyncEventArgs 비동기 객체를 사용하지 않음
+        private ValueTask<bool> StartSendAsync(SendStream stream, CancellationToken cancel_token)
         {
-            /*if (null == buffer.Array) 
-                throw new ArgumentNullException(nameof(buffer));
-
-            if (null == SendQueue)
-                throw new NullReferenceException(nameof(SendQueue));
-
-            if (false == Socket.UpdateState(SocketBase.eSocketState.Sending))
-                Logger.Error($"Error in UserToken.StartSendAsync() - Fail to update send state [sending]");
-
-            return SendQueue.Writer.WriteAsync(buffer, cancel_token);
-            */
-
             if (null == stream.Buffer.Array)
                 throw new ArgumentNullException(nameof(stream.Buffer.Array));
 
             if (null == SendQueue)
                 throw new NullReferenceException(nameof(SendQueue));
 
-            if (false == Socket.UpdateState(SocketBase.eSocketState.Sending))
+            if (!Socket.UpdateState(SocketBase.eSocketState.Sending))
                 Logger.Error($"Error in UserToken.StartSendAsync() - Fail to update send state [sending]");
 
-            return SendQueue.Writer.WriteAsync(stream, cancel_token);
+            // mCompleteFlag = false 일 때만 queue에 데이터 추가
+            if (0 == Interlocked.CompareExchange(ref mCompleteFlag, 0, 0))
+            { 
+                while(!mSendBackupQueue.IsEmpty)
+                {
+                    SendStream? backup_stream;
+                    if (mSendBackupQueue.TryPeek(out backup_stream))
+                    {
+                        try
+                        {
+                            SendQueue.Writer.WriteAsync(item: backup_stream, cancellationToken: cancel_token);
+                            
+                            mSendBackupQueue.TryDequeue(out backup_stream);
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.Warn($"Warning in UserToken.StartSendAsync() - Fail to Channel.Writer.WriteAsync(). exception = {ex.Message}." +
+                                        $"backup_stream = {Newtonsoft.Json.JsonConvert.SerializeObject(backup_stream, Newtonsoft.Json.Formatting.Indented)}. stack_trace = {ex.StackTrace}");
+                        }
+                    }
+                }
 
+                try
+                {
+                    SendQueue.Writer.WriteAsync(item: stream, cancellationToken: cancel_token);
+                }
+                catch (Exception ex)
+                {
+                    mSendBackupQueue.Enqueue(item: stream);
+                    Logger.Warn($"Warning in UserToken.StartSendAsync() - Fail to Channel.Writer.WriteAsync(). exception = {ex.Message}. " +
+                                $"stream = {Newtonsoft.Json.JsonConvert.SerializeObject(stream, Newtonsoft.Json.Formatting.Indented)}. stack_trace = {ex.StackTrace}");
+                }
+            }
+            else
+            {
+                mSendBackupQueue.Enqueue(stream);
+            }
+
+            return ValueTask.FromResult(true);
         }
 
         // 별도의 패킷 처리 스레드에서 호출. 큐잉된 패킷 데이터들에 대한 실질적인 비동기 send 진행
+        // io_thread가 5개일 경우 5개의 스레드에서 각 호출
         public virtual async ValueTask ProcessSendAsync()
         {
             if (false == Connected)
@@ -295,16 +338,19 @@ namespace ServerEngine.Network.ServerSession
             if (null == SendAsyncEvent)
                 return;
 
-            SendQueue.Writer.Complete();
-            await foreach(var item in SendQueue.Reader.ReadAllAsync())
+            // 해당 메서드가 호출되는 순간 Channel.Writer를 Complete로 변경. 더 이상 queue에 데이터 추가가 안됨
+            if (0 == Interlocked.CompareExchange(ref mCompleteFlag, 1, 0))
             {
-                SendAsyncEvent.BufferList?.Add(item.Buffer);
-            }
+                SendQueue.Writer.Complete();
+           
+                await foreach(var item in SendQueue.Reader.ReadAllAsync())
+                    SendAsyncEvent.BufferList?.Add(item.Buffer);
 
-            var pending = Socket.GetSocket?.SendAsync(SendAsyncEvent);
-            if (false == pending)
-            {
-                OnSendCompleteHandler(null, SendAsyncEvent);
+                mCompleteFlag = 0;
+
+                var pending = Socket.GetSocket?.SendAsync(SendAsyncEvent);
+                if (false == pending)
+                    OnSendCompleteHandler(null, SendAsyncEvent);
             }
         }
 

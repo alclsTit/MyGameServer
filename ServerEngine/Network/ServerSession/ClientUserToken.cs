@@ -83,6 +83,7 @@ namespace ServerEngine.Network.ServerSession
 
             while (true)
             {
+                // 해당 Thread에 엮인 모든 UserToken에 대해서 SendProcess 진행
                 foreach (var token in mThreadUserTokens[index])
                 {
                     await token.ProcessSendAsync();
