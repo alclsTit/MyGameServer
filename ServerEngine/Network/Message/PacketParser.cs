@@ -50,15 +50,27 @@ namespace ServerEngine.Network.Message
 
         public ArraySegment<byte> Serialize<TMessage>(TMessage message, ushort message_id, SendStream stream) where TMessage : IMessage
         {
-            if (null == message)
+
+            if (null == message) 
                 throw new ArgumentNullException(nameof(message));
 
-            if (0 > message_id || Utility.MAX_PACKET_DEFINITION_SIZE < message_id)
+            if (message_id < 0 || message_id > Utility.MAX_PACKET_DEFINITION_SIZE) 
                 throw new ArgumentOutOfRangeException(nameof(message_id));
 
-            if (null == stream.Buffer.Array)
-                throw new ArgumentNullException(nameof(stream.Buffer.Array));
-            
+            //if (null == stream.Buffer.Array)
+            //    throw new ArgumentNullException(nameof(stream.Buffer.Array));
+            ArraySegment<byte> segment;
+            if (null == stream.Buffer)
+            {
+                throw new ArgumentNullException(nameof(stream.Buffer));
+            }
+            else
+            {
+                segment = new ArraySegment<byte>(stream.Buffer);
+                if (null == segment.Array)
+                    throw new NullReferenceException(nameof(segment.Array));
+            }
+
             try
             {
                 var header_size = Utility.MAX_PACKET_HEADER_SIZE + Utility.MAX_PACKET_HEADER_TYPE;
@@ -66,17 +78,22 @@ namespace ServerEngine.Network.Message
                 var packet_size = header_size + body_size;
                 int offset = 0;
 
-                Buffer.BlockCopy(BitConverter.GetBytes(header_size), 0, stream.Buffer.Array, offset, Utility.MAX_PACKET_HEADER_SIZE);
+                //if (stream.Buffer.Count < packet_size)
+                //    throw new InvalidOperationException("SendStream.Buffer is too small for the serialized packet");
+                if (stream.Buffer.Length < packet_size)
+                    throw new InvalidOperationException("SendStream.Buffer is too small for the serialized packet");
+
+                Buffer.BlockCopy(BitConverter.GetBytes(header_size), 0, segment.Array, offset, Utility.MAX_PACKET_HEADER_SIZE);
                 offset += Utility.MAX_PACKET_HEADER_SIZE;
 
-                Buffer.BlockCopy(BitConverter.GetBytes(message_id), 0, stream.Buffer.Array, offset, Utility.MAX_PACKET_HEADER_TYPE);
+                Buffer.BlockCopy(BitConverter.GetBytes(message_id), 0, segment.Array, offset, Utility.MAX_PACKET_HEADER_TYPE);
                 offset += Utility.MAX_PACKET_HEADER_TYPE;
 
-                Buffer.BlockCopy(message.ToByteArray(), 0, stream.Buffer.Array, offset, body_size);
+                Buffer.BlockCopy(message.ToByteArray(), 0, segment.Array, offset, body_size);
 
-                return stream.Buffer;
+                return segment;
             }
-            catch (Exception )
+            catch (Exception)
             {
                 throw;
             }          
@@ -87,11 +104,20 @@ namespace ServerEngine.Network.Message
             if (null == message)
                 throw new ArgumentNullException(nameof(message));
 
-            if (0 > message_id || Utility.MAX_PACKET_DEFINITION_SIZE < message_id)
+            if (message_id < 0 || message_id > Utility.MAX_PACKET_DEFINITION_SIZE)
                 throw new ArgumentOutOfRangeException(nameof(message_id));
 
-            if (null == stream.Buffer.Array)
-                throw new ArgumentNullException(nameof(stream.Buffer.Array));
+            ArraySegment<byte> segment;
+            if (null == stream.Buffer)
+            {
+                throw new ArgumentNullException(nameof(stream.Buffer));
+            }
+            else
+            {
+                segment = new ArraySegment<byte>(stream.Buffer);
+                if (null == segment.Array)
+                    throw new NullReferenceException(nameof(segment.Array));
+            }  
 
             try
             {
@@ -99,13 +125,16 @@ namespace ServerEngine.Network.Message
                 var body_size = message.CalculateSize();
                 var packet_size = header_size + body_size;
 
-                Buffer.BlockCopy(BitConverter.GetBytes(header_size), 0, stream.Buffer.Array, offset, Utility.MAX_PACKET_HEADER_SIZE);
+                if (stream.Buffer.Length < packet_size)
+                    throw new InvalidOperationException("SendStream.Buffer is too small for the serialized packet");
+
+                Buffer.BlockCopy(BitConverter.GetBytes(header_size), 0, segment.Array, offset, Utility.MAX_PACKET_HEADER_SIZE);
                 offset += Utility.MAX_PACKET_HEADER_SIZE;
 
-                Buffer.BlockCopy(BitConverter.GetBytes(message_id), 0, stream.Buffer.Array, offset, Utility.MAX_PACKET_HEADER_TYPE);
+                Buffer.BlockCopy(BitConverter.GetBytes(message_id), 0, segment.Array, offset, Utility.MAX_PACKET_HEADER_TYPE);
                 offset += Utility.MAX_PACKET_HEADER_TYPE;
 
-                Buffer.BlockCopy(message.ToByteArray(), 0, stream.Buffer.Array, offset, body_size);
+                Buffer.BlockCopy(message.ToByteArray(), 0, segment.Array, offset, body_size);
 
                 return true;
             }

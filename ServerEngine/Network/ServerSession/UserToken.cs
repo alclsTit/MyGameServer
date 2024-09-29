@@ -7,6 +7,7 @@ using ServerEngine.Network.Message;
 using ServerEngine.Network.SystemLib;
 using Google.Protobuf;
 using System.Collections.Concurrent;
+using Serilog.Data;
 
 namespace ServerEngine.Network.ServerSession
 {
@@ -348,7 +349,7 @@ namespace ServerEngine.Network.ServerSession
                 await foreach(var item in SendQueue.Reader.ReadAllAsync())
                     SendAsyncEvent.BufferList?.Add(item.Buffer);
 
-                //channel의 complete 호출시 해당 channl을 재사용하는것이 아닌 새로운 channel을 생성하여 이후로직을 처리하는것이 권고된다
+                //channel의 complete 호출시 해당 channel을 재사용하는것이 아닌 새로운 channel을 생성하여 이후로직을 처리
                 //mCompleteFlag = 0;
                 if (null != mConfigSocket)
                     SendQueue = Channel.CreateBounded<SendStream>(capacity: mConfigSocket.send_buff_size);
@@ -374,16 +375,87 @@ namespace ServerEngine.Network.ServerSession
                     return;
                 }
 
+                // 네트워크 상태이상으로 한번에 보내지지 못한 미처리패킷에 대한 후처리 진행
                 if (null != e.BufferList)
                 {
+                    // e.BytesTransferred(실제 전송한 바이트 수)가 BufferList의 각 사이즈 합계(버퍼리스트 총 바이트 수)보다 작다면 재전송
+                    int buffer_bytes_transferred = e.BufferList.Sum(buffer => buffer.Count);
 
+                    if (bytes_transferred < buffer_bytes_transferred)
+                    {
+                        Logger.Warn($"Warning in UserToken.OnSendCompleteHandler() - Partial send detected. Transferred {bytes_transferred} bytes, expected {buffer_bytes_transferred}");
+
+                        List<ArraySegment<byte>> remaining_buffers = GetRemainingBuffers(buffer_list: e.BufferList, bytesTransferred: bytes_transferred);
+
+                        e.BufferList = remaining_buffers;
+
+                        var pending = Socket.GetSocket?.SendAsync(e);
+                        if (false == pending)
+                            OnSendCompleteHandler(sender, e);
+                    }
+                    else
+                    {
+                        // 모든 데이터가 정상적으로 전달
+                        if (Logger.IsEnableDebug)
+                            Logger.Debug($"All data sent successfully. Transferred {bytes_transferred} bytes. expected {buffer_bytes_transferred}");
+                    }
                 }
-
+                else
+                {
+                    Logger.Error($"Error in UserToken.OnSendCompleteHandler() - Send BufferList is Empty. e.BufferList is null");
+                }
             }
             catch (Exception ex) 
             {
                 Logger.Error($"Exception in UserToken.OnSendCompleteHandler() - {ex.Message} - {ex.StackTrace}", ex);
             }
+        }
+
+        /// <summary>
+        /// 잔여 Send 패킷으로 인한 재전송이 필요한 경우, 재전송 버퍼체크 및 반환
+        /// </summary>
+        /// <param name="buffer_list">e.BufferList</param>
+        /// <param name="bytesTransferred">e.bytesTransferred</param>
+        /// <returns></returns>
+        private List<ArraySegment<byte>> GetRemainingBuffers(IList<ArraySegment<byte>> buffer_list, int bytesTransferred)
+        {
+            List<ArraySegment<byte>> remaining_buffers = new List<ArraySegment<byte>>();
+            int total_transferred = 0;
+
+            // buffer[0] : 14
+            // buffer[1] : 17
+            // buffer[2] : 20  ---- transferred : 51 / 50
+            // buffer[3] : 11
+            // buffer[4] : 100
+
+            foreach(var buffer in buffer_list) 
+            {
+                if (null == buffer.Array)
+                    continue;
+
+                if (total_transferred + buffer.Count <= bytesTransferred)
+                {
+                    total_transferred += buffer.Count;
+                    continue;
+                }
+
+                int remaining_buffer_count = bytesTransferred - total_transferred;
+                if (remaining_buffer_count > 0)
+                {
+                    // offset : buffer.offset + (이미 전송된 바이트 수)
+                    // count : 남이있는 바이트 수 >> 세그먼트의 전체 바이트 수 - (이미 전송된 바이트 수)
+                    remaining_buffers.Add(new ArraySegment<byte>(buffer.Array, buffer.Offset + remaining_buffer_count, buffer.Count - remaining_buffer_count));
+                }
+                else
+                {
+                    // 아예 전송되지 않은 버퍼의 경우
+                    remaining_buffers.Add(buffer);
+                }
+
+                total_transferred += buffer.Count;
+            }
+
+            return remaining_buffers;
         }
 
         public virtual void StartReceive(/*RecvStream stream*/)
