@@ -27,14 +27,12 @@ namespace ServerEngine.Network.Message
     {
         #region property
         public int Tag { get; private set; }
-        //public ArraySegment<byte> Buffer { get; protected set; }
-        public byte[] Buffer { get; protected set; }
+        public ArraySegment<byte> Buffer { get; protected set; }
         #endregion
 
         protected Stream(int buffer_size) 
         {
-            //Buffer = new ArraySegment<byte>(new byte[buffer_size]); 
-            Buffer = new byte[buffer_size];
+            Buffer = new ArraySegment<byte>(new byte[buffer_size]); 
         }
 
         public virtual bool Initialize()
@@ -51,10 +49,8 @@ namespace ServerEngine.Network.Message
         public virtual bool Reset()
         {
             Tag = 0;
-            //if (null != Buffer.Array)
-            //    Array.Clear(Buffer.Array, 0, Buffer.Array.Length);
-            if (null != Buffer)
-                Array.Clear(Buffer, 0, Buffer.Length);
+            if (null != Buffer.Array)
+                Array.Clear(Buffer.Array, 0, Buffer.Array.Length);
 
             return true;
         }
