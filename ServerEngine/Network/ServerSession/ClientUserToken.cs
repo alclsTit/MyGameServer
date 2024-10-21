@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
+using System.Security.Permissions;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -142,7 +143,52 @@ namespace ServerEngine.Network.ServerSession
             base.TokenType = eTokenType.Client;
             base.mTokenId = token_id;
 
+            // UseToken 생성 후 heartbeat_start_time(sec) 이후 heartbeat check 진행
+            mBackgroundTimer = new Timer(HeartbeatCheck, null, 
+                                         TimeSpan.FromSeconds(config_network.config_socket.heartbeat_start_time), 
+                                         TimeSpan.FromSeconds(config_network.config_socket.heartbeat_check_time));
+
             return true;
+        }
+
+        // ThreadPool에서 가져온 임의의 작업자 스레드(백그라운드 스레드)에서 실행
+        public override void HeartbeatCheck(object? state)
+        {
+            try
+            {
+                if (Logger.IsEnableDebug)
+                    Logger.Debug($"ClientUserToken [{base.mTokenId}] Heartbeat Check Start. CurTime = {DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss")}");
+            
+                if (0 != mHeartbeatCheckTime)
+                {
+                    // 클라이언트로부터 heartbeat 패킷이 서버로 전달되었고
+                    // heartbeat interval이 지나서 체크되어야할 시간일 때.
+                    if (mHeartbeatCheckTime == mLastHeartbeatCheckTime)
+                    {
+                        // 하트비트 시간이 갱신이 안되었다. 즉, 클라이언트로부터 하트비트 패킷이 제대로 전달이 되지 않았다
+                        int increased = Interlocked.Increment(ref base.mHeartbeatCount);
+                        if (null != base.GetConfigSocket && increased >= base.GetConfigSocket.heartbeat_count)
+                        {
+                            // disconnect session
+
+                            if (Logger.IsEnableDebug)
+                            {
+                                var (ip, port) = GetRemoteEndPointIPAddress();
+                                Logger.Debug($"ClientUserToken [{base.mTokenId}][{ip}:{port}] is disconnected. Heartbeat full check. CurTime = {DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss")}");
+                            }
+                        }
+                    }
+                    else
+                    {
+                        Interlocked.Exchange(ref base.mHeartbeatCount, 0);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Exception in ClientUserToken.HeartbeatCheck() - {ex.Message} - {ex.StackTrace}");
+                return;
+            }
         }
 
         public override void Dispose()

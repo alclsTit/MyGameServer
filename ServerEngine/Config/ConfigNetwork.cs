@@ -43,8 +43,8 @@ namespace ServerEngine.Config
         public int recv_timeout { get; }
         public int send_timeout { get; }    
         public int send_queue_size { get; }
-        public ushort heartbeat_start_time { get; }
-        public ushort heartbeat_check_time { get; }
+        public ushort heartbeat_start_time { get; }     // sec
+        public ushort heartbeat_check_time { get; }     // sec
         public ushort linger_time { get; }
         public byte heartbeat_count { get; }
         public byte no_delay { get; }

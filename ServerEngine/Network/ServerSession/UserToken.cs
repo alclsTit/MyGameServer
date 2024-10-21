@@ -8,6 +8,7 @@ using ServerEngine.Network.SystemLib;
 using Google.Protobuf;
 using System.Collections.Concurrent;
 using Serilog.Data;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace ServerEngine.Network.ServerSession
 {
@@ -95,20 +96,22 @@ namespace ServerEngine.Network.ServerSession
             Server
         }
 
-        private IConfigSocket? mConfigSocket;
         private IPEndPoint? mLocalEndPoint;
         private IPEndPoint? mRemoteEndPoint;
         private bool mDisposed = false;
         private volatile bool mConnected = false;
+        private IConfigSocket? mConfigSocket;
         private IConfigNetwork? mConfigNetwork;
         private volatile int mCompleteFlag = 0; // 0: false / 1: true
         private ConcurrentQueue<SendStream> mSendBackupQueue = new ConcurrentQueue<SendStream>();
         private Func<SocketAsyncEventArgs?, SocketAsyncEventArgs?, SendStreamPool?, bool>? mRetrieveEvent;
+        protected System.Threading.Timer? mBackgroundTimer = null;
+        protected long mHeartbeatCheckTime, mLastHeartbeatCheckTime;
+        protected volatile int mHeartbeatCount;
 
         #region property
         public long mTokenId { get; protected set; } = 0;
         public eTokenType TokenType { get; protected set; } = eTokenType.None;
-
         protected Channel<SendStream>? SendQueue { get; private set; }
         public SocketBase Socket { get; protected set; }
         public Log.ILogger Logger { get; private set; }
@@ -125,7 +128,13 @@ namespace ServerEngine.Network.ServerSession
         public IPEndPoint? GetLocalEndPoint => mLocalEndPoint;
         public IPEndPoint? GetRemoteEndPoint => mRemoteEndPoint;
         public bool Connected => mConnected;
+
+        public IConfigNetwork? GetConfigNetwork => mConfigNetwork;
+        public IConfigSocket? GetConfigSocket => mConfigSocket;
+
         #endregion
+
+        public abstract void HeartbeatCheck(object? state);
 
         protected bool InitializeBase(Log.ILogger logger, IConfigNetwork config_network, SocketBase socket, 
                                       SocketAsyncEventArgs send_event_args, SocketAsyncEventArgs recv_event_args, 
@@ -158,6 +167,58 @@ namespace ServerEngine.Network.ServerSession
         }
 
         #region public_method
+        public (string, int) GetRemoteEndPointIPAddress()
+        {
+            if (null == mRemoteEndPoint)
+                return default;
+
+            if (null == mRemoteEndPoint.Address)
+                return default;
+
+            return (mRemoteEndPoint.Address.ToString(), mRemoteEndPoint.Port);
+        }
+
+        // 클라이언트 or 서버로부터 전달받은 heartbeat 패킷 시간
+        public void SetHeartbeatCheckTime(long time)
+        {
+            if (0 != mHeartbeatCheckTime)
+                mLastHeartbeatCheckTime = mHeartbeatCheckTime;
+
+            mHeartbeatCheckTime = time;
+        }
+
+        // protobuf 형식의 메시지를 받아 직렬화한 뒤 동기로 메시지 큐잉
+        public virtual bool Send<TMessage>(TMessage message, ushort message_id)
+            where TMessage : IMessage
+        {
+            if (null == SendStreamPool)
+            {
+                Logger.Error($"Error in UserToken.Send() - SendStreamPool is null");
+                return false;
+            }
+
+            try
+            {
+                SendStream stream = SendStreamPool.Get();
+                if (mProtoParser.TrySerialize(message: message,
+                                              message_id: message_id,
+                                              stream: stream))
+                {
+                    return StartSend(stream);
+                }
+                else
+                {
+                    Logger.Error($"Error in UserToken.Send() - Fail to Serialize");
+                    return false;
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Exception in UserToken.Send() - {ex.Message} - {ex.StackTrace}");
+                return false;
+            }
+        }
+
         // protobuf 형식의 메시지를 받아 직렬화한 뒤 비동기로 메시지 큐잉
         public virtual async ValueTask SendAsync<TMessage>(TMessage message, ushort message_id, CancellationToken canel_token) 
             where TMessage : IMessage
@@ -187,38 +248,6 @@ namespace ServerEngine.Network.ServerSession
             {
                 Logger.Error($"Exception in UserToken.SendAsync() - {ex.Message} - {ex.StackTrace}");
                 return;
-            }
-        }
-
-        // protobuf 형식의 메시지를 받아 직렬화한 뒤 동기로 메시지 큐잉
-        public virtual bool Send<TMessage>(TMessage message, ushort message_id) 
-            where TMessage: IMessage
-        {
-            if (null == SendStreamPool)
-            {
-                Logger.Error($"Error in UserToken.Send() - SendStreamPool is null");
-                return false;
-            }
-
-            try
-            {
-                SendStream stream = SendStreamPool.Get();
-                if (mProtoParser.TrySerialize(message: message,
-                                              message_id: message_id,
-                                              stream: stream))
-                {
-                    return StartSend(stream);
-                }
-                else
-                {
-                    Logger.Error($"Error in UserToken.Send() - Fail to Serialize");
-                    return false;
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.Error($"Exception in UserToken.Send() - {ex.Message} - {ex.StackTrace}");
-                return false;
             }
         }
 
@@ -625,6 +654,9 @@ namespace ServerEngine.Network.ServerSession
         {
             if (mDisposed)
                 return;
+
+            // Dispose timer
+            mBackgroundTimer?.Dispose();
 
             // Dispose (close) socket
             Socket.DisconnectSocket();

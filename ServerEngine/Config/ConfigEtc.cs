@@ -8,6 +8,88 @@ using System.Threading.Tasks;
 namespace ServerEngine.Config
 {
     #region Config - Data
+    public interface IRedisAddress
+    {
+        public string ip { get; }
+        public int port { get; }
+        public string url { get; }
+        public int db_index { get; }
+    }
+
+    public interface IConfigRedis
+    {
+        public string name { get; }
+        public IRedisAddress address { get; }
+        public string password { get; }
+        public bool ssl { get; }
+        public int keep_alive_sec { get; }
+        public int connect_retry { get; }
+        public int reconnect_timeout_sec { get; }
+        public int sync_timeout_sec { get; }
+    }
+
+    public interface IConfigMultiRedis
+    {
+        public string name { get; }
+        public IList<IRedisAddress> list_address { get; }
+        public string password { get; }
+        public bool ssl { get; }
+        public int keep_alive_sec { get; }
+        public int connect_retry { get; }
+        public int reconnect_timeout_sec { get; }
+        public int sync_timeout_sec { get; }
+    }
+
+    public class DefaultConfigRedis : IConfigRedis
+    {
+        public string name { get; }
+        public IRedisAddress address { get; }
+        public string password { get; }
+        public bool ssl { get; }
+        public int keep_alive_sec { get;}
+        public int connect_retry { get;}  
+        public int reconnect_timeout_sec { get;}    
+        public int sync_timeout_sec { get;}
+        public DefaultConfigRedis(string name, IRedisAddress address, string password, 
+                                  bool ssl, int keep_alive_sec, int connect_retry, 
+                                  int reconnect_timeout_sec, int sync_timeout_sec)
+        {
+            this.name = name;
+            this.address = address;
+            this.password = password;
+            this.ssl = ssl;
+            this.keep_alive_sec = keep_alive_sec;
+            this.connect_retry = connect_retry;
+            this.reconnect_timeout_sec = reconnect_timeout_sec;
+            this.sync_timeout_sec = sync_timeout_sec;
+        }
+    }
+
+    public class DefaultConfigMultiRedis : IConfigMultiRedis
+    {
+        public string name { get; }
+        public IList<IRedisAddress> list_address { get; }
+        public string password { get; }
+        public bool ssl { get; }
+        public int keep_alive_sec { get; }
+        public int connect_retry { get; }
+        public int reconnect_timeout_sec { get; }
+        public int sync_timeout_sec { get; }
+        public DefaultConfigMultiRedis(string name, IList<IRedisAddress> list_address, string password,
+                                       bool ssl, int keep_alive_sec, int connect_retry,
+                                       int reconnect_timeout_sec, int sync_timeout_sec)
+        {
+            this.name = name;
+            this.list_address = list_address;
+            this.password = password;
+            this.ssl = ssl;
+            this.keep_alive_sec = keep_alive_sec;
+            this.connect_retry = connect_retry;
+            this.reconnect_timeout_sec = reconnect_timeout_sec;
+            this.sync_timeout_sec = sync_timeout_sec;
+        }
+    }
+
     public interface IConfigLog
     {
         public string name { get; }
