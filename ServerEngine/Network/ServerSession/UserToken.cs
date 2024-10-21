@@ -105,9 +105,10 @@ namespace ServerEngine.Network.ServerSession
         private volatile int mCompleteFlag = 0; // 0: false / 1: true
         private ConcurrentQueue<SendStream> mSendBackupQueue = new ConcurrentQueue<SendStream>();
         private Func<SocketAsyncEventArgs?, SocketAsyncEventArgs?, SendStreamPool?, bool>? mRetrieveEvent;
-        protected System.Threading.Timer? mBackgroundTimer = null;
-        protected long mHeartbeatCheckTime, mLastHeartbeatCheckTime;
-        protected volatile int mHeartbeatCount;
+        private System.Threading.Timer? mBackgroundTimer = null;
+        private volatile int mHeartbeatCheckTime;
+        private volatile int mLastHeartbeatCheckTime;
+        private volatile int mHeartbeatCount;
 
         #region property
         public long mTokenId { get; protected set; } = 0;
@@ -134,8 +135,6 @@ namespace ServerEngine.Network.ServerSession
 
         #endregion
 
-        public abstract void HeartbeatCheck(object? state);
-
         protected bool InitializeBase(Log.ILogger logger, IConfigNetwork config_network, SocketBase socket, 
                                       SocketAsyncEventArgs send_event_args, SocketAsyncEventArgs recv_event_args, 
                                       SendStreamPool send_stream_pool, RecvStream recv_stream, 
@@ -161,7 +160,12 @@ namespace ServerEngine.Network.ServerSession
 
             mConnected = true;
 
-            mRetrieveEvent = retrieve_event; 
+            mRetrieveEvent = retrieve_event;
+
+            // UseToken 생성 후 heartbeat_start_time(sec) 이후 heartbeat check 진행
+            mBackgroundTimer = new Timer(HeartbeatCheck, null,
+                                         TimeSpan.FromSeconds(config_network.config_socket.heartbeat_start_time),
+                                         TimeSpan.FromSeconds(config_network.config_socket.heartbeat_check_time));
 
             return true;
         }
@@ -178,13 +182,55 @@ namespace ServerEngine.Network.ServerSession
             return (mRemoteEndPoint.Address.ToString(), mRemoteEndPoint.Port);
         }
 
-        // 클라이언트 or 서버로부터 전달받은 heartbeat 패킷 시간
-        public void SetHeartbeatCheckTime(long time)
+        // ThreadPool에서 가져온 임의의 작업자 스레드(백그라운드 스레드)에서 실행
+        // 자식 클래스에서 오버라이딩하여 사용할 수도 있으므로 일단 가상함수로 선언
+        public virtual void HeartbeatCheck(object? state)
         {
-            if (0 != mHeartbeatCheckTime)
-                mLastHeartbeatCheckTime = mHeartbeatCheckTime;
+            try
+            {
+                if (Logger.IsEnableDebug)
+                    Logger.Debug($"UserToken >> [{TokenType}:{mTokenId}]. Heartbeat Check Start. CurTime = {DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss")}");
 
-            mHeartbeatCheckTime = time;
+                if (0 != Interlocked.CompareExchange(ref mHeartbeatCheckTime, 0, 0))
+                {
+                    // 클라이언트로부터 heartbeat 패킷이 서버로 전달되었고
+                    // heartbeat interval이 지나서 체크되어야할 시간일 때.
+                    if (mLastHeartbeatCheckTime == Interlocked.CompareExchange(ref mHeartbeatCheckTime, mHeartbeatCheckTime, mLastHeartbeatCheckTime))
+                    {
+                        // 하트비트 시간이 갱신이 안되었다. 즉, 클라이언트로부터 하트비트 패킷이 제대로 전달이 되지 않았다
+                        int increased = Interlocked.Increment(ref mHeartbeatCount);
+                        if (null != mConfigSocket && increased >= mConfigSocket.heartbeat_count)
+                        {
+                            // disconnect session
+                            ProcessClose(true);
+
+                            if (Logger.IsEnableDebug)
+                            {
+                                var (ip, port) = GetRemoteEndPointIPAddress();
+                                Logger.Debug($"UserToken >> [{TokenType}:{mTokenId}]. [{ip}:{port}] is disconnected. Heartbeat full check. CurTime = {DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss")}");
+                            }
+                        }
+                    }
+                    else
+                    {
+                        Interlocked.Exchange(ref mHeartbeatCount, 0);
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                throw;
+            }
+        }
+
+
+        // 클라이언트 or 서버로부터 전달받은 heartbeat 패킷 시간
+        public void SetHeartbeatCheckTime(int time)
+        {
+            if (0 != Interlocked.CompareExchange(ref mHeartbeatCheckTime, 0, 0))
+                Interlocked.Exchange(ref mLastHeartbeatCheckTime, mHeartbeatCheckTime);
+
+            Interlocked.Exchange(ref mHeartbeatCheckTime, time);
         }
 
         // protobuf 형식의 메시지를 받아 직렬화한 뒤 동기로 메시지 큐잉
