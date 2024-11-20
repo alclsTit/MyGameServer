@@ -11,6 +11,7 @@ using ServerEngine.Common;
 using ServerEngine.Network.ServerSession;
 using ServerEngine.Config;
 using ServerEngine.Network.Server;
+using System.Data;
 
 namespace ServerEngine.Network.SystemLib
 {
@@ -122,13 +123,7 @@ namespace ServerEngine.Network.SystemLib
                     new SocketEventArgsObjectPoolPolicy(OnAcceptCompleteHandler), 
                     maximum_retained);
 
-                var old_state = (eNetworkSystemState)mState;
-                var new_state = eNetworkSystemState.Initialized;
-                if (false == base.UpdateState(new_state))
-                {
-                    Logger.Error($"Error in TcpAcceptor.Initialize() - Fail to update state [{old_state}] -> [{new_state}]");
-                    return false;
-                }
+                UpdateState(eNetworkSystemState.Initialized);
 
                 if (Logger.IsEnableDebug)
                     Logger.Debug($"TcpAcceptor Initialize Complete");
@@ -150,12 +145,7 @@ namespace ServerEngine.Network.SystemLib
                 return false;
             }
 
-            var new_state = eNetworkSystemState.Running;
-            if (false == UpdateState(new_state))
-            {
-                Logger.Error($"Error in TcpAcceptor.Start() - Fail to update state [{new_state}]");
-                return false;
-            }
+            UpdateState(eNetworkSystemState.Running);
 
             mAcceptThread.Start();
 
@@ -273,13 +263,7 @@ namespace ServerEngine.Network.SystemLib
                     Logger.Error($"Error in TcpAcceptor.Stop() - Stop process is already working. state = [{state}]");
                     return;
                 }
-
-                if (false == base.UpdateState(eNetworkSystemState.Stopping))
-                {
-                    Logger.Error($"Error in TcpAcceptor.Stop() - Fail to update state [{state}] -> [{eNetworkSystemState.Stopping}]");
-                    return;
-                }
-
+              
                 if (null == Interlocked.CompareExchange(ref mListenSocket, null, null) ||
                     true == mListenSocket?.IsNullSocket())
                 {
@@ -292,6 +276,8 @@ namespace ServerEngine.Network.SystemLib
                     Logger.Error($"Error in TcpAcceptor.Stop() - Fail to update running flag. current running = {old_running}");
                     return;
                 }
+
+                UpdateState(eNetworkSystemState.Stopping);
 
                 mThreadBlockEvent.WaitOne();
 

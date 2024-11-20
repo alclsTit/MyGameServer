@@ -307,22 +307,23 @@ namespace ServerEngine.Network.ServerSession
             if (null == SendQueue)
                 throw new NullReferenceException(nameof(SendQueue));
 
-            if (!Socket.UpdateState(SocketBase.eSocketState.Sending))
-                Logger.Error($"Error in UserToken.StartSend() - Fail to update send state [sending]");
+            Socket.UpdateState(SocketBase.eSocketState.Sending);
 
             // mCompleteFlag = false 일 때만 queue에 데이터 추가
             if (0 == Interlocked.CompareExchange(ref mCompleteFlag, 0, 0))
             {
-                while(!mSendBackupQueue.IsEmpty)
+                // send backup queue에 데이터가 있는지 없는지 확인하고 있다면, sending queue에 해당 데이터를 추가
+                while(false == mSendBackupQueue.IsEmpty)
                 {
                     SendStream? backup_stream = null;
                     if (mSendBackupQueue.TryDequeue(out backup_stream))
                     {
-                        if (!SendQueue.Writer.TryWrite(item: backup_stream))
+                        if (false == SendQueue.Writer.TryWrite(item: backup_stream))
                         {
                             Logger.Warn($"Warning in UserToken.StartSend() - Fail to Channel.Writer.TryWrite()." +
                                         $" backup_stream = {Newtonsoft.Json.JsonConvert.SerializeObject(backup_stream, Newtonsoft.Json.Formatting.Indented)}");
 
+                            // while 문의 바쁜대기를 고려하여 delay를 부여 
                             Task.Delay(5).Wait();
                             mSendBackupQueue.Enqueue(backup_stream);
                             continue;
@@ -330,7 +331,7 @@ namespace ServerEngine.Network.ServerSession
                     }
                 }
 
-                if (!SendQueue.Writer.TryWrite(item: stream))
+                if (false == SendQueue.Writer.TryWrite(item: stream))
                 {
                     // channel에 데이터 추가가 실패하면 backup queue에 추가하여 이후에 처리한다
                     mSendBackupQueue.Enqueue(stream);
@@ -357,13 +358,13 @@ namespace ServerEngine.Network.ServerSession
             if (null == SendQueue)
                 throw new NullReferenceException(nameof(SendQueue));
 
-            if (!Socket.UpdateState(SocketBase.eSocketState.Sending))
-                Logger.Error($"Error in UserToken.StartSendAsync() - Fail to update send state [sending]");
+            Socket.UpdateState(SocketBase.eSocketState.Sending);
 
             // mCompleteFlag = false 일 때만 queue에 데이터 추가
             if (0 == Interlocked.CompareExchange(ref mCompleteFlag, 0, 0))
-            { 
-                while(!mSendBackupQueue.IsEmpty)
+            {
+                // send backup queue에 데이터가 있는지 없는지 확인하고 있다면, sending queue에 해당 데이터를 추가
+                while (false == mSendBackupQueue.IsEmpty)
                 {
                     SendStream? backup_stream;
                     if (mSendBackupQueue.TryPeek(out backup_stream))
@@ -379,6 +380,7 @@ namespace ServerEngine.Network.ServerSession
                             Logger.Warn($"Warning in UserToken.StartSendAsync() - Fail to Channel.Writer.WriteAsync(). exception = {ex.Message}." +
                                         $"backup_stream = {Newtonsoft.Json.JsonConvert.SerializeObject(backup_stream, Newtonsoft.Json.Formatting.Indented)}. stack_trace = {ex.StackTrace}");
 
+                            // while 문의 바쁜대기를 고려하여 delay를 부여 
                             Task.Delay(5).WaitAsync(cancellationToken: cancel_token);
                         }
                     }
@@ -437,6 +439,7 @@ namespace ServerEngine.Network.ServerSession
             }
         }
 
+        // send callback handler
         public virtual void OnSendCompleteHandler(object? sender, SocketAsyncEventArgs e)
         {
             try
@@ -553,11 +556,7 @@ namespace ServerEngine.Network.ServerSession
                 return;
             }
 
-            if (false == Socket.UpdateState(SocketBase.eSocketState.Recving))
-            {
-                Logger.Error($"Error in UserToken.StartReceive() - Fail to update recv state [recving]");
-                return;
-            }
+            Socket.UpdateState(SocketBase.eSocketState.Recving);
 
             try
             {
@@ -584,6 +583,7 @@ namespace ServerEngine.Network.ServerSession
             }
         }
 
+        // recv callback handler
         public virtual void OnRecvCompleteHandler(object? sender, SocketAsyncEventArgs e)
         {
             var socket_error = e.SocketError;
@@ -655,19 +655,13 @@ namespace ServerEngine.Network.ServerSession
                 // 1. null socket check (null > exit)
                 // 2. socket close check (closed or closing > exit)
                 // 3. socket connect check (false > exit)
-                if (true == Socket.IsNullSocket() || 
-                    true == Socket.IsClosed() || 
+                if (true == Socket.IsNullSocket() || true == Socket.IsClosed() || 
                     false == Socket.IsConnected())
                 {
                     return;
                 }
 
-                var socket_state = SocketBase.eSocketState.Closing;
-                if (false == Socket.UpdateState(SocketBase.eSocketState.Closing))
-                {
-                    Logger.Error($"Error in UserToken.ProcessEnd() - Fail to update socket state {socket_state}. token_id = {mTokenId}, token_type = {TokenType}");
-                    return;
-                }
+                Socket.UpdateState(SocketBase.eSocketState.Closing);
 
                 // connected && not closing, close complete
                 bool sending = Socket.CheckState(SocketBase.eSocketState.Sending);

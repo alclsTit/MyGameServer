@@ -16,6 +16,7 @@ namespace ServerEngine.Network.SystemLib
     public abstract class SocketBase
     {
         // [0 0 0 0] [0 0 0 0] ([close][send/recv])
+        // Socket 상태가 동시에 2개이상일 수 있어 [Flags] 애트리뷰트 사용
         [Flags]
         public enum eSocketState : int
         {
@@ -36,23 +37,14 @@ namespace ServerEngine.Network.SystemLib
 
         protected Socket? mRawSocket;
         private object mLockObject = new object();
-        private volatile int mState = (int)eSocketState.None;
+        private int mState = (int)eSocketState.None;
         private volatile int mConnected = 0;
-
-        // protected int mSocketState = ServerState.NotInitialized;
-
-        //public int GetSocketState => mSocketState;
-
-        //public bool IsSocketNull => mRawSocket == null;
 
         #region property
         public Log.ILogger Logger { get; protected set; }
         public Socket? GetSocket => mRawSocket;
-        public int GetState => mState;
+        public int GetState => Volatile.Read(ref mState);
         #endregion
-
-
-        //public bool IsInClosingOrClosed => mSocketState >= SocketState.Closing;
 
         protected SocketBase(Socket socket, Log.ILogger logger)
         {
@@ -65,30 +57,31 @@ namespace ServerEngine.Network.SystemLib
         #region method
         public bool IsNullSocket()
         {
-            var origin = Interlocked.CompareExchange(ref mRawSocket, null, null);
-            return null == origin ? true : false;
+            return null == Interlocked.CompareExchange(ref mRawSocket, null, null);
         }
 
         public bool SetConnect(eConnectState flag)
         {
-            if (eConnectState.NotConnected != flag || eConnectState.Connected != flag)
-                return false;
+            if (eConnectState.NotConnected != flag && eConnectState.Connected != flag)
+                throw new ArgumentException("Invalid flag value", nameof(flag));
 
-            int new_state = (int)flag;
-            var old_connected = mConnected;
-
-            return old_connected == Interlocked.Exchange(ref mConnected, new_state) ? true : false;
+            Interlocked.Exchange(ref mConnected, (int)flag);
+            
+            return true;
         }
 
         public bool IsConnected()
         {
-            var old_connected = mConnected;
-            return old_connected == Interlocked.CompareExchange(ref mConnected, 1, 1) ? true : false;
+            return (int)eConnectState.Connected == Interlocked.CompareExchange(ref mConnected, 
+                                                                              (int)eConnectState.Connected, 
+                                                                              (int)eConnectState.Connected);
         }
 
         public bool IsClosed()
         {
-            var state = mState;
+            // 원자적 Read 및 이후 스택변수인 state 값을 사용하여 비트연산 진행 (thread-safe)
+            // mState 변수에 대한 쓰기작업은 Interlocked 메서드를 통해서만 진행되므로 쓰기작업이 thread-safe함이 보장됨
+            var state = Volatile.Read(ref mState);
 
             var check_close = state & (int)eSocketState.Closing;
             if ((int)eSocketState.Closing == check_close)
@@ -101,61 +94,36 @@ namespace ServerEngine.Network.SystemLib
             return false;
         }
 
-        // 삭제예정
-        /*public bool CheckCanClose()
-         {
-             var curState = mSocketState;
-
-             if (curState == SocketState.Closing)
-                 return false;
-
-             if (curState == SocketState.Closed)
-                 return false;
-
-             return true;
-         }
-         */
-
-        // 삭제 예정
-        /*
-        public bool ChangeState(int oldState, int newState)
+        public void UpdateState(eSocketState state)
         {
-            if (Interlocked.Exchange(ref mSocketState, newState) == oldState)
-                return true;
-
-            return false;
-        }
-        */
-        public bool UpdateState(eSocketState state)
-        {
-            var old_state = mState;
-            var new_state = old_state | (int)state;
-
-            return old_state == Interlocked.Exchange(ref mState, new_state) ? true : false;
+            Interlocked.Exchange(ref mState, (int)state);
         }
 
-        public bool RemoveState(eSocketState state)
+        public void RemoveState(eSocketState state)
         {
-            var old_state = mState;
+            // 원자적 Read 및 이후 스택변수인 state 값을 사용하여 비트연산 진행 (thread-safe)
+            var old_state = Volatile.Read(ref mState);
             var new_state = old_state & ~(int)state;
 
-            return old_state == Interlocked.Exchange(ref mState, new_state) ? true : false;
+            Interlocked.Exchange(ref mState, new_state);
         }
 
         public bool CheckState(eSocketState state)
         {
-            var old_state = mState;
-            var check_state = (int)state;
+            // 원자적 Read 및 이후 스택변수인 state 값을 사용하여 비트연산 진행 (thread-safe)
+            var old_state = Volatile.Read(ref mState);
+            var confirm_state = (int)state;
 
-            return check_state == (old_state & check_state);
+            return confirm_state == (old_state & confirm_state);
         }
 
         public bool CheckNotSendRecv()
         {
-            var check_recv = CheckState(eSocketState.Recving);
-            var check_send = CheckState(eSocketState.Sending);
-            
-            return check_recv && check_send;
+            if (false == CheckState(eSocketState.Sending) &&
+                false == CheckState(eSocketState.Recving))
+                return true;
+
+            return false;
         }
 
         public virtual void DisconnectSocket(SocketShutdown shutdown_option = SocketShutdown.Both)
@@ -163,33 +131,26 @@ namespace ServerEngine.Network.SystemLib
             if (true == IsNullSocket() || true == IsClosed())
                 return;
 
-            eSocketState new_state = eSocketState.Closing;
-            if (false == UpdateState(new_state))
+            UpdateState(eSocketState.Closing);
+
+            try
             {
-                Logger.Error($"Error in SocketBase.DisconnectSocket() - Fail to update state [{new_state}]");
-                return;
+                lock (mLockObject)
+                {
+                    if (null == mRawSocket)
+                        return;
+
+                    if (mRawSocket.Connected)
+                        mRawSocket.Shutdown(shutdown_option);
+
+                    mRawSocket.Dispose();
+
+                    UpdateState(eSocketState.CloseComplete);
+                }
             }
-            else
+            catch (Exception)
             {
-                try
-                {
-                    lock (mLockObject)
-                    {
-                        if (null == mRawSocket)
-                            return;
-
-                        if (mRawSocket.Connected)
-                            mRawSocket.Shutdown(shutdown_option);
-
-                        mRawSocket.Dispose();
-
-                        UpdateState(eSocketState.CloseComplete);
-                    }
-                }
-                catch (Exception)
-                {
-                    throw;
-                }
+                throw;
             }
         }
 
@@ -222,6 +183,11 @@ namespace ServerEngine.Network.SystemLib
         #endregion
 
         #region "Socket State Change"
+        //protected int mSocketState = ServerState.NotInitialized;
+        //public int GetSocketState => mSocketState;
+        //public bool IsSocketNull => mRawSocket == null;
+        //public bool IsInClosingOrClosed => mSocketState >= SocketState.Closing;
+
         // Socket 상태의 경우 send/recv가 동시에 일어날 수 있기 때문에 state에 상태가 중복저장될 수 있다. 따라서 비트연산진행        
         // 해당 메서드는 상태가 중복해서 저장될 수 있는 경우 호출 (ex: recv)
         /*public bool AddState(int state, bool checkClose)

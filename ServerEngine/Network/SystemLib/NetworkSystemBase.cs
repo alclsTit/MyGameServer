@@ -109,13 +109,9 @@ namespace ServerEngine.Network.SystemLib
             return old_state == Interlocked.CompareExchange(ref mState, check_state, check_state) ? true : false;
         }
 
-        public bool UpdateState(eNetworkSystemState state)
+        public void UpdateState(eNetworkSystemState state)
         {
-            var old_state = (int)state;
-            if (old_state == mState)
-                return true;
-
-            return old_state == Interlocked.Exchange(ref mState, (int)state);
+            Interlocked.Exchange(ref mState, (int)state);
         }
 
         protected void OnStopCallback()

@@ -219,13 +219,7 @@ namespace ServerEngine.Network.Server
             
             LocalEndPoint = ServerHostFinder.GetServerIPAddress(config_listen.port);
 
-            var old_state = (eServerState)mState;
-            var new_state = eServerState.Initialized;
-            if (false == UpdateState(new_state))
-            {
-                Logger.Error($"Error in ServerModuleBase.Initialize() - Fail to Update State [{old_state}] -> [{new_state}]");
-                return false;
-            }
+            UpdateState(eServerState.Initialized);
 
             return true;
         }

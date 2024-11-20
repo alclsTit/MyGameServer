@@ -44,13 +44,7 @@ namespace ServerEngine.Network.SystemLib
             {
                 mClientSocket = new TcpSocket(new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp), base.Logger);
 
-                var old_state = (eNetworkSystemState)mState;
-                var new_state = eNetworkSystemState.Initialized;
-                if (false == base.UpdateState(new_state))
-                {
-                    Logger.Error($"Error in TcpConnector.Initialize() - Fail to update state [{old_state}] -> [{new_state}]");
-                    return false;
-                }
+                UpdateState(eNetworkSystemState.Initialized);
 
                 if (Logger.IsEnableDebug)
                     Logger.Debug($"TcpConnector Initialize Complete");
@@ -167,11 +161,7 @@ namespace ServerEngine.Network.SystemLib
                     return;
                 }
 
-                if (false == base.UpdateState(eNetworkSystemState.Stopping))
-                {
-                    Logger.Error($"Error in TcpConnector.Stop() - Fail to update state [{state}] - > [{eNetworkSystemState.Stopping}]");
-                    return;
-                }
+                UpdateState(eNetworkSystemState.Stopping);
 
                 if (true == mClientSocket?.GetSocket?.Connected)
                     mClientSocket?.DisconnectSocket(SocketShutdown.Send);
