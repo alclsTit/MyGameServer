@@ -199,13 +199,11 @@ namespace ServerEngine.Network.Server
             Acceptors = acceptor;
         }
 
-        public bool UpdateState(eServerState state)
+        public void UpdateState(eServerState state)
         {
-            var old_state = mState;
-            if (old_state == (int)state)
-                return true;
-
-            return old_state == Interlocked.Exchange(ref mState, (int)state) ? true : false;
+            var old_state = GetState;
+            if (old_state != (int)state)
+                Interlocked.Exchange(ref mState, (int)state);
         }
 
         public virtual bool Initialize()
@@ -234,54 +232,6 @@ namespace ServerEngine.Network.Server
 
             return true;
         }
-
-        /*public virtual void Initialize(List<IConfigListen> listen_config_list, IConfigListen config_listen, ServerConfig serverInfo, INetworkSystemBase networkSystem, Log.ILogger logger, Func<Session> creater)
-        {
-            if (null == listen_config_list)
-                throw new ArgumentNullException(nameof(listen_config_list));
-
-            if (config_listen == null)
-                throw new ArgumentNullException(nameof(config_listen));
-
-            if (serverInfo == null)
-                throw new ArgumentNullException(nameof(serverInfo));
-
-            if (networkSystem == null)
-                throw new ArgumentNullException(nameof(networkSystem));
-
-            if (logger == null)
-                throw new ArgumentNullException(nameof(logger));
-
-            if (creater == null)
-                throw new ArgumentNullException(nameof(creater));
-
-            mListenInfoList = listenInfoList;
-            mListenInfo = config_listen;
-            ipEndPoint = ServerHostFinder.GetServerIPAddress(config_listen.port);
-
-            mServerInfo = serverInfo;
-            
-            mNetworkSystem = networkSystem;
-
-            #region "2022.05.04 기존 커스텀 ObjectPool -> Microsoft.Extensions.ObjectPool로 변경에 따른 코드 주석처리"
-            
-            //mRecvEventPool = new SocketAsyncEventArgsPool(mServerInfo.maxConnectNumber);
-            //mSendEventPool = new SocketAsyncEventArgsPool(mServerInfo.maxConnectNumber);
-            
-            #endregion
-
-            var old_state = mState;
-            if (false == UpdateState(eServerState.Initialized))
-            {
-                logger.Error($"Error in ServerModuleBase.Initialize() - Fail to Update State [{(eServerState)old_state}] -> [{(eServerState)mState}]");
-                return;
-            }
-
-            // 마지막에 초기화 진행
-            mNetworkSystem.Initialize(this, config_listen, serverInfo, this.Logger, creater);
-            mNetworkSystem.StopCallback += OnNetworkSystemStopped;
-        }
-        */
 
         public virtual void OnNewClientCreateHandler(SocketAsyncEventArgs e, bool client_call)
         {
