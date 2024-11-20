@@ -15,7 +15,7 @@ namespace ServerEngine.Network.Server
     /// </summary>
     public class ControlServer : ServerBase
     {
-        public ControlServer(ILogger logger) : base(logger) { }
+        public ControlServer(Log.ILogger logger) : base(logger) { }
 
         public override bool Initialize(string name, IConfigCommon config)
         {

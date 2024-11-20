@@ -111,7 +111,7 @@ namespace ServerEngine.Network.ServerSession
         private volatile int mHeartbeatCount;
 
         #region property
-        public long mTokenId { get; protected set; } = 0;
+        public string mTokenId { get; protected set; } = 0;
         public eTokenType TokenType { get; protected set; } = eTokenType.None;
         protected Channel<SendStream>? SendQueue { get; private set; }
         public SocketBase Socket { get; protected set; }

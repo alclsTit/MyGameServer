@@ -78,7 +78,7 @@ namespace ServerEngine.Network.Server
         /// <summary>
         /// uid generator
         /// </summary>
-        private Dictionary<UIDGenerator.eGenerateType, UIDGenerator> mUidGenerators;
+        private Dictionary<UIDGenerator.eContentsType, UIDGenerator> mUidGenerators;
 
     #region property
         /// <summary>
@@ -99,7 +99,7 @@ namespace ServerEngine.Network.Server
         /// <summary>
         /// 각각의 서버모듈이 작동하기 시작한 시작시간 (utc+0)
         /// </summary>
-        public int ServiceStartTime { get; protected set; }
+        public ulong ServiceStartTime { get; protected set; }
    
         /// <summary>
         /// server_module name
@@ -134,7 +134,7 @@ namespace ServerEngine.Network.Server
             this.Config = config;
             this.config_listen_list = config.config_network.config_listen_list;
 
-            ServiceStartTime = DateTime.UtcNow.ToUnixTime();
+            ServiceStartTime = DateTime.UtcNow.ToUnixTimeUInt64();
 
             // Microsoft.Extensions.ObjectPool 사용
             // ObjectPool에서 관리하는 최대 풀 객체 수 세팅
@@ -193,7 +193,7 @@ namespace ServerEngine.Network.Server
             ClientUserTokenManager = new ClientUserTokenManager(logger, config.config_network);
 
             // Create UidGenerator
-            mUidGenerators = new Dictionary<UIDGenerator.eGenerateType, UIDGenerator>();
+            mUidGenerators = new Dictionary<UIDGenerator.eContentsType, UIDGenerator>();
 
             // Accpetor (tcp / udp)
             Acceptors = acceptor;
@@ -222,12 +222,12 @@ namespace ServerEngine.Network.Server
             return true;
         }
 
-        public virtual bool InitializeUidGenerators(int server_gid, int server_index, int max_connection)
+        public virtual bool InitializeUidGenerators(int server_gid, int server_index, uint max_connection)
         {
-            for (int i = 1; i < (int)UIDGenerator.eGenerateType.Max; ++i)
+            for (int i = 1; i < (int)UIDGenerator.eContentsType.Max; ++i)
             {
-                UIDGenerator.eGenerateType type = (UIDGenerator.eGenerateType)i;
-                mUidGenerators.Add(type, new UIDGenerator(type, server_gid, server_index, max_connection));
+                var contents_type = (UIDGenerator.eContentsType)i;
+                mUidGenerators.Add(contents_type, new UIDGenerator(contents_type, server_gid, server_index, max_connection));
             }
 
             return true;
@@ -270,7 +270,7 @@ namespace ServerEngine.Network.Server
                     return;
                 }
 
-                bool get_token = TryGetUid(UIDGenerator.eGenerateType.UserToken, out var token_id);
+                bool get_token = TryGetUID(UIDGenerator.eContentsType.UserToken, out var token_id);
                 if (false == get_token)
                 {
                     Logger.Error($"Error in ServerModule.OnNewClientCreateHandler() - Fail to Get ClientUserTokenId");
@@ -337,16 +337,16 @@ namespace ServerEngine.Network.Server
             }
         }
 
-        public bool TryGetUid(UIDGenerator.eGenerateType type, out long uid)
+        public bool TryGetUID(UIDGenerator.eContentsType type, out string uid)
         {
             if (mUidGenerators.TryGetValue(type, out var generator))
             {
-                uid = generator.GetInt64();
+                uid = generator.GetString();
                 return true;
             }
             else
             {
-                uid = 0;
+                uid = string.Empty;
                 return false;
             }
         }

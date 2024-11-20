@@ -23,7 +23,7 @@ namespace ServerEngine.Network.ServerSession
         #endregion
 
         private ConcurrentDictionary<int, List<ClientUserToken>> mThreadUserTokens = new ConcurrentDictionary<int, List<ClientUserToken>>();
-        public ConcurrentDictionary<long, ClientUserToken> UserTokens { get; private set; } = new ConcurrentDictionary<long, ClientUserToken>();
+        public ConcurrentDictionary<string, ClientUserToken> UserTokens { get; private set; } = new ConcurrentDictionary<string, ClientUserToken>();
 
         public ClientUserTokenManager(Log.ILogger logger, IConfigNetwork config_network)
             : base(logger, config_network)
@@ -37,8 +37,8 @@ namespace ServerEngine.Network.ServerSession
 
             try
             {
-                int max_io_thread_count = base.m_config_network.max_io_thread_count;
-                int user_per_thread = (int)(max_connection / max_io_thread_count);
+                int max_io_thread_count = m_config_network.max_io_thread_count;
+                int user_per_thread = max_connection / max_io_thread_count;
                 for (var i = 0; i < max_io_thread_count; ++i)
                     mThreadUserTokens.TryAdd(i, new List<ClientUserToken>(user_per_thread));
 
@@ -51,21 +51,28 @@ namespace ServerEngine.Network.ServerSession
             }
         }
 
-        public bool TryAddUserToken(long uid, ClientUserToken token)
+        // UID의 맨 끝에 해당하는 전역카운터의 일의 자리 숫자가 index로 설정됨
+        // - index는 UIDGenerator에서 eContentsType:UserToken에 해당하는 mLoopLimit의 범위내에서 생성됨
+        public bool TryAddUserToken(string uid, ClientUserToken token)
         {
-            if (0 >= uid)
+            if (string.IsNullOrEmpty(uid))
                 throw new ArgumentException(nameof(uid));
 
             if (null == token)
                 throw new ArgumentNullException(nameof(token));
 
-            var index = (int)(uid % base.m_config_network.max_io_thread_count);
+            if (false == int.TryParse(uid[0].ToString(), out var uid_first_index))
+                throw new ArgumentNullException(nameof(uid));
+
+            // uid의 일의 자리 값을 꺼낸다
+            // ex: max_io_thread_count가 4라면, 1 >> 1, 5 >> 1, 9 >> 1 
+            int index = uid_first_index % m_config_network.max_io_thread_count;
             mThreadUserTokens[index].Add(token);
 
             return UserTokens.TryAdd(uid, token);
         }
 
-        public bool TryRemoveToken(long uid)
+        public bool TryRemoveToken(string uid)
         {
             if (UserTokens.TryGetValue(uid, out var token))
             {
@@ -79,7 +86,7 @@ namespace ServerEngine.Network.ServerSession
 
         public async ValueTask Run(int index)
         {
-            if (0 > index || base.m_config_network.max_io_thread_count <= index)
+            if (0 > index || m_config_network.max_io_thread_count <= index)
                 throw new ArgumentException($"Index {index}");
 
             while (true)
@@ -103,7 +110,7 @@ namespace ServerEngine.Network.ServerSession
         public bool Initialize(Log.ILogger logger, IConfigNetwork config_network, SocketBase socket, 
                               SocketAsyncEventArgs send_event_args, SocketAsyncEventArgs recv_event_args, 
                               SendStreamPool? send_stream_pool, RecvStream recv_stream, 
-                              long token_id, Func<SocketAsyncEventArgs?, SocketAsyncEventArgs?, SendStreamPool?, bool> retrieve_event)
+                              string token_id, Func<SocketAsyncEventArgs?, SocketAsyncEventArgs?, SendStreamPool?, bool> retrieve_event)
         {
             if (null == logger)
                 throw new ArgumentNullException(nameof(logger));
@@ -126,7 +133,7 @@ namespace ServerEngine.Network.ServerSession
             if (null == recv_stream)
                 throw new ArgumentNullException(nameof(recv_stream));
 
-            if (0 >= token_id)
+            if (string.IsNullOrEmpty(token_id))
                 throw new ArgumentNullException(nameof(token_id));
 
             if (null == retrieve_event)

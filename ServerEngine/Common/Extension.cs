@@ -25,12 +25,17 @@ namespace ServerEngine.Common
         }
 
         #region TimeExtension
-        public static int ToUnixTime(this DateTime cur_datetime)
+        public static uint ToUnixTimeUInt32(this DateTime datetime)
         {
-            TimeSpan interval = cur_datetime - DateTime.UnixEpoch;
-            return (int)interval.TotalSeconds;
+            TimeSpan interval = datetime - DateTime.UnixEpoch;
+            return (uint)interval.TotalSeconds;
         }
 
+        public static ulong ToUnixTimeUInt64(this DateTime datetime)
+        {
+            TimeSpan interval = datetime - DateTime.UnixEpoch;
+            return (ulong)interval.TotalSeconds;
+        }
         #endregion
     }
 }
