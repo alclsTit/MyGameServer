@@ -60,6 +60,7 @@ namespace ServerEngine.Network.SystemLib
             return null == Interlocked.CompareExchange(ref mRawSocket, null, null);
         }
 
+        // socket 연결 상태 세팅
         public bool SetConnect(eConnectState flag)
         {
             if (eConnectState.NotConnected != flag && eConnectState.Connected != flag)
@@ -70,6 +71,7 @@ namespace ServerEngine.Network.SystemLib
             return true;
         }
 
+        // socket 연결유무 확인
         public bool IsConnected()
         {
             return (int)eConnectState.Connected == Interlocked.CompareExchange(ref mConnected, 
@@ -94,11 +96,13 @@ namespace ServerEngine.Network.SystemLib
             return false;
         }
 
+        // socket 상태 변경
         public void UpdateState(eSocketState state)
         {
             Interlocked.Exchange(ref mState, (int)state);
         }
 
+        // socket 상태 제거
         public void RemoveState(eSocketState state)
         {
             // 원자적 Read 및 이후 스택변수인 state 값을 사용하여 비트연산 진행 (thread-safe)
@@ -128,22 +132,28 @@ namespace ServerEngine.Network.SystemLib
 
         public virtual void DisconnectSocket(SocketShutdown shutdown_option = SocketShutdown.Both)
         {
-            if (true == IsNullSocket() || true == IsClosed())
+            if (IsClosed())
+            {
+                Logger.Error($"Error in SocketBase.DisconnectSocket() - Socket State already {Volatile.Read(ref mState)}");
                 return;
-
-            UpdateState(eSocketState.Closing);
+            }
 
             try
             {
                 lock (mLockObject)
                 {
                     if (null == mRawSocket)
+                    {
+                        Logger.Error($"Error in SocketBase.DisconnectSocket() - Socket is null");
                         return;
+                    }
+                    
+                    UpdateState(eSocketState.Closing);
 
                     if (mRawSocket.Connected)
                         mRawSocket.Shutdown(shutdown_option);
 
-                    mRawSocket.Dispose();
+                    mRawSocket.Close();
 
                     UpdateState(eSocketState.CloseComplete);
                 }
@@ -154,7 +164,15 @@ namespace ServerEngine.Network.SystemLib
             }
         }
 
-        public void InternalClose(ServerSession.Session session, eCloseReason reason, Action<ServerSession.Session, eCloseReason> close_event)
+        public virtual void Dispose(SocketShutdown shutdown_option = SocketShutdown.Both)
+        {
+            DisconnectSocket(shutdown_option);
+
+            UpdateState(eSocketState.None);
+            SetConnect(eConnectState.NotConnected);
+        }
+
+        /*public void InternalClose(ServerSession.Session session, eCloseReason reason, Action<ServerSession.Session, eCloseReason> close_event)
         {
             try
             {
@@ -173,13 +191,7 @@ namespace ServerEngine.Network.SystemLib
                 throw;
             }
         }
-
-        public virtual void Dispose()
-        {
-            mRawSocket?.Dispose();
-
-            Interlocked.Exchange(ref mState, (int)eSocketState.None);
-        }
+        */
         #endregion
 
         #region "Socket State Change"

@@ -56,5 +56,10 @@ namespace ServerEngine.Network.SystemLib
                 Logger.Error($"Exception in TcpSocket.SetSocketOption - {e.Message} - {e.StackTrace}");
             }
         }
+
+        public override void Dispose(SocketShutdown shutdown_type)
+        {
+            base.Dispose(shutdown_type);
+        }
     }
 }

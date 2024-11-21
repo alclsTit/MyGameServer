@@ -18,6 +18,7 @@ using System.Diagnostics.CodeAnalysis;
 using ServerEngine.Network.Message;
 using System.Linq.Expressions;
 using System.Collections.Concurrent;
+using System.Globalization;
 
 namespace ServerEngine.Network.Server
 {
@@ -41,7 +42,7 @@ namespace ServerEngine.Network.Server
         }
     }*/
 
-    public class ServerModule : IServerModule, IAsyncEventCallbackHandler
+    public class ServerModule : IAsyncEventCallbackHandler
     {
         public enum eServerState : int
         {
@@ -54,7 +55,6 @@ namespace ServerEngine.Network.Server
             Max = 6
         }
 
-
         /// <summary>
         /// server_module state
         /// </summary>
@@ -63,11 +63,18 @@ namespace ServerEngine.Network.Server
         /// <summary>
         /// Microsoft.Extensions.ObjectPool
         /// </summary>
-        protected DisposableObjectPool<SocketAsyncEventArgs> mSendEventArgsPool, mRecvEventArgsPool;
-        private DisposableObjectPool<ClientUserToken> mClientUserTokenPool;
-        private RecvStreamPoolThread mRecvStreamPool;
-        private ConcurrentStack<SendStreamPool> mSendStreamPoolStack = new ConcurrentStack<SendStreamPool>();
+        protected DisposableObjectPool<SocketAsyncEventArgs> mClientSendEventArgsPool;
+        protected DisposableObjectPool<SocketAsyncEventArgs> mClientRecvEventArgsPool;
+        protected DisposableObjectPool<SocketAsyncEventArgs> mServerSendEventArgsPool;
+        protected DisposableObjectPool<SocketAsyncEventArgs> mServerRecvEventArgsPool;
 
+        private RecvStreamPoolThread mClientRecvStreamPool;
+        private RecvStreamPoolThread mServerRecvStreamPool;
+
+        private ConcurrentStack<SendStreamPool> mClientSendStreamPoolStack = new ConcurrentStack<SendStreamPool>();
+        private ConcurrentStack<SendStreamPool> mServerSendStreamPoolStack = new ConcurrentStack<SendStreamPool>();
+
+        private DisposableObjectPool<ClientUserToken> mClientUserTokenPool;
         #region "2022.05.04 기존 커스텀 ObjectPool -> Microsoft.Extensions.ObjectPool로 변경에 따른 코드 주석처리"
         /*
         public SocketAsyncEventArgsPool mRecvEventPool { get; private set; }
@@ -78,7 +85,7 @@ namespace ServerEngine.Network.Server
         /// <summary>
         /// uid generator
         /// </summary>
-        private Dictionary<UIDGenerator.eContentsType, UIDGenerator> mUidGenerators;
+        private ConcurrentDictionary<UIDGenerator.eContentsType, UIDGenerator> mUidGenerators;
 
     #region property
         /// <summary>
@@ -87,9 +94,15 @@ namespace ServerEngine.Network.Server
         public IPEndPoint? LocalEndPoint { get; private set; }
 
         /// <summary>
-        /// 서버모듈이 가지고 있는 Accept / Connect 객체 (1:1 관계)
+        /// 서버 모듈이 관리하는 acceptors 객체들
         /// </summary>
         public List<NetworkSystemBase> Acceptors { get; private set; }
+
+        /// <summary>
+        /// 서버 모듈이 관리하는 connectors 객체들
+        /// server to server 간의 connect 연결 필요할 때 추가
+        /// </summary>
+        public List<NetworkSystemBase> Connectors { get; private set; }
 
         /// <summary>
         /// 모든 리슨정보
@@ -138,72 +151,71 @@ namespace ServerEngine.Network.Server
 
             // Microsoft.Extensions.ObjectPool 사용
             // ObjectPool에서 관리하는 최대 풀 객체 수 세팅
-            int maximum_retained = 0;
-            int? pool_default_size = 0;
             if (!config.config_etc.pools.name.Equals(name, StringComparison.OrdinalIgnoreCase)) 
                 throw new ArgumentException(nameof(name));
 
-            // Set SocketAsyncEventArgs ObjectPool
+            // Send / Recv ObjectPool Setting
+            foreach(var item in config_listen_list)
             {
-                string target = "socketasynceventargs";
-                pool_default_size = config.config_etc.pools.list.FirstOrDefault(e => e.name.Equals(target, StringComparison.OrdinalIgnoreCase))?.default_size;
-
-                foreach(var item in config.config_network.config_listen_list)
-                    maximum_retained += item.max_connection;
-
-                maximum_retained = true == pool_default_size.HasValue ? pool_default_size.Value : maximum_retained;
-
-                if (Logger.IsEnableDebug)
-                    Logger.Debug($"Debug in ServerModuleBase() - SocketAsyncEventArgs ObjectPool Size = {maximum_retained}");
-            }
-
-            // ObjectPool 객체에 callback handler만 선제적으로 등록
-            mSendEventArgsPool = new DisposableObjectPool<SocketAsyncEventArgs>(new SocketEventArgsObjectPoolPolicy(handler), maximum_retained);
-            mRecvEventArgsPool = new DisposableObjectPool<SocketAsyncEventArgs>(new SocketEventArgsObjectPoolPolicy(handler), maximum_retained);
-
-            mClientUserTokenPool = new DisposableObjectPool<ClientUserToken>(new DefaultPooledObjectPolicy<ClientUserToken>(), maximum_retained);
-
-            // Set SendStreamPool ObjectPool
-            {
-                //string target = "sendstream";
-                //pool_default_size = config.config_etc.pools.list.FirstOrDefault(e => e.name.Equals(target, StringComparison.OrdinalIgnoreCase))?.default_size;
-
-                //mSendStreamPool = new SendStreamPoolThread(config.config_network.max_io_thread_count / 2, pool_default_size ?? Utility.MAX_POOL_DEFAULT_SIZE_COMMON, config.config_network.config_socket.send_buff_size);
-                //string target = "sendstream";
-                //pool_default_size = config.config_etc.pools.list.FirstOrDefault(e => e.name.Equals(target, StringComparison.OrdinalIgnoreCase))?.default_size;
-                for (int i = 0; i < maximum_retained; ++i)
+                string config_name = item.name.ToLower();
+                switch(config_name) 
                 {
-                    mSendStreamPoolStack.Push(new SendStreamPool(default_size: Utility.MAX_USERTOKEN_POOL_DEFAULT_SIZE_COMMON, 
-                                                                 send_buffer_size: config.config_network.config_socket.send_buff_size));
+                    case "client":
+                        {
+                            mClientRecvEventArgsPool = new DisposableObjectPool<SocketAsyncEventArgs>(new SocketEventArgsObjectPoolPolicy(handler), item.max_connection);
+                            mClientSendEventArgsPool = new DisposableObjectPool<SocketAsyncEventArgs>(new SocketEventArgsObjectPoolPolicy(handler), item.max_connection);
+                            mClientUserTokenPool = new DisposableObjectPool<ClientUserToken>(new DefaultPooledObjectPolicy<ClientUserToken>(), item.max_connection);
 
+                            // Send 전용 버퍼를 들고있는 객체 풀
+                            for (int i = 0; i < item.max_connection; ++i)
+                                mClientSendStreamPoolStack.Push(new SendStreamPool(default_size: Utility.MAX_CLIENT_USERTOKEN_POOL_DEFAULT_SIZE_COMMON,
+                                                                                   send_buffer_size: config.config_network.config_socket.send_buff_size));
+
+                            //string target = "recvstream";
+                            //pool_default_size = config.config_etc.pools.list.FirstOrDefault(e => e.name.Equals(target, StringComparison.OrdinalIgnoreCase))?.default_size;
+
+                            mClientRecvStreamPool = new RecvStreamPoolThread(max_worker_count: config.config_network.max_recv_thread_count,
+                                                                             default_size: Utility.MAX_POOL_DEFAULT_SIZE_COMMON,
+                                                                             recv_buffer_size: config.config_network.config_socket.recv_buff_size);
+                        }
+                        break;
+                    case "server":
+                        {
+                            mServerRecvEventArgsPool = new DisposableObjectPool<SocketAsyncEventArgs>(new SocketEventArgsObjectPoolPolicy(handler), item.max_connection);
+                            mServerSendEventArgsPool = new DisposableObjectPool<SocketAsyncEventArgs>(new SocketEventArgsObjectPoolPolicy(handler), item.max_connection);
+
+                            // Send 전용 버퍼를 들고있는 객체 풀
+                            for (int i = 0; i < item.max_connection; ++i)
+                                mServerSendStreamPoolStack.Push(new SendStreamPool(default_size: Utility.MAX_SERVER_USERTOKEN_POOL_DEFAULT_SIZE_COMMON,
+                                                                                   send_buffer_size: config.config_network.config_socket.send_buff_size));
+
+                            //string target = "recvstream";
+                            //pool_default_size = config.config_etc.pools.list.FirstOrDefault(e => e.name.Equals(target, StringComparison.OrdinalIgnoreCase))?.default_size;
+
+                            mServerRecvStreamPool = new RecvStreamPoolThread(max_worker_count: config.config_network.max_send_thread_count,
+                                                                             default_size: Utility.MAX_POOL_DEFAULT_SIZE_COMMON,
+                                                                             recv_buffer_size: config.config_network.config_socket.recv_buff_size);
+                        }
+                        break;
+                    default:
+                        {
+                            logger.Error($"Error in ServerModule() - config_listen_list name is error. config_name = {config_name}");
+                            return;
+                        }
                 }
-            }
 
-            // Set RecvStream ObjectPool
-            {
-                string target = "recvstream";
-                pool_default_size = config.config_etc.pools.list.FirstOrDefault(e => e.name.Equals(target, StringComparison.OrdinalIgnoreCase))?.default_size;
-
-                mRecvStreamPool = new RecvStreamPoolThread(max_worker_count: config.config_network.max_io_thread_count / 2, 
-                                                           default_size: pool_default_size ?? Utility.MAX_POOL_DEFAULT_SIZE_COMMON, 
-                                                           recv_buffer_size: config.config_network.config_socket.recv_buff_size);
+                if (logger.IsEnableDebug)
+                    logger.Debug($"Debug in ServerModule() - {config_name} Recv/Send ObjectPool Size = {item.max_connection}");
             }
 
             // Client에서 접속해서 생성된 UserToken 관리
             ClientUserTokenManager = new ClientUserTokenManager(logger, config.config_network);
 
             // Create UidGenerator
-            mUidGenerators = new Dictionary<UIDGenerator.eContentsType, UIDGenerator>();
+            mUidGenerators = new ConcurrentDictionary<UIDGenerator.eContentsType, UIDGenerator>();
 
             // Accpetor (tcp / udp)
             Acceptors = acceptor;
-        }
-
-        public void UpdateState(eServerState state)
-        {
-            var old_state = GetState;
-            if (old_state != (int)state)
-                Interlocked.Exchange(ref mState, (int)state);
         }
 
         public virtual bool Initialize()
@@ -227,10 +239,17 @@ namespace ServerEngine.Network.Server
             for (int i = 1; i < (int)UIDGenerator.eContentsType.Max; ++i)
             {
                 var contents_type = (UIDGenerator.eContentsType)i;
-                mUidGenerators.Add(contents_type, new UIDGenerator(contents_type, server_gid, server_index, max_connection));
+                mUidGenerators.TryAdd(contents_type, new UIDGenerator(contents_type, server_gid, server_index, max_connection));
             }
 
             return true;
+        }
+
+        public void UpdateState(eServerState state)
+        {
+            var old_state = GetState;
+            if (old_state != (int)state)
+                Interlocked.Exchange(ref mState, (int)state);
         }
 
         public virtual void OnNewClientCreateHandler(SocketAsyncEventArgs e, bool client_call)
@@ -270,17 +289,17 @@ namespace ServerEngine.Network.Server
                     return;
                 }
 
-                bool get_token = TryGetUID(UIDGenerator.eContentsType.UserToken, out var token_id);
-                if (false == get_token)
+                bool get_token_id = TryGetUID(UIDGenerator.eContentsType.UserToken, out var token_id);
+                if (false == get_token_id)
                 {
                     Logger.Error($"Error in ServerModule.OnNewClientCreateHandler() - Fail to Get ClientUserTokenId");
                     return;
                 }
 
+                ClientUserToken client_token = mClientUserTokenPool.Get();
                 try
                 {
-                    // usertoken processing
-                    var client_token = mClientUserTokenPool.Get();
+                    // Client UserToken processing
 
                     var socket = new TcpSocket(new_socket, Logger);
                     socket.SetSocketOption(config_network: Config.config_network);
@@ -288,28 +307,28 @@ namespace ServerEngine.Network.Server
 
                     // send 
                     SendStreamPool? send_stream_pool = null;
-                    var peek_send = mSendStreamPoolStack.TryPeek(out send_stream_pool);
+                    var peek_send = mClientSendStreamPoolStack.TryPeek(out send_stream_pool);
                     if (false == peek_send)
                     {
-                        send_stream_pool = new SendStreamPool(default_size: Utility.MAX_USERTOKEN_POOL_DEFAULT_SIZE_COMMON,
+                        send_stream_pool = new SendStreamPool(default_size: Utility.MAX_CLIENT_USERTOKEN_POOL_DEFAULT_SIZE_COMMON,
                                                               Config.config_network.config_socket.send_buff_size);
-                        mSendStreamPoolStack.Push(send_stream_pool);
+                        mClientSendStreamPoolStack.Push(send_stream_pool);
                         Logger.Warn("Warning in ServerModule.OnNewClientCreateHandler() - SendStreamPool is created by new allocator");
                     }
                     else
                     {
-                        mSendStreamPoolStack.TryPop(out send_stream_pool);
+                        mClientSendStreamPoolStack.TryPop(out send_stream_pool);
                     } 
                     
                     // receive
-                    var recv_stream = mRecvStreamPool.Get();
+                    var recv_stream = mClientRecvStreamPool.Get();
                     if (null == recv_stream)
                     {
                         recv_stream = new RecvStream(Config.config_network.config_socket.recv_buff_size);
                         Logger.Warn($"Warning in ServerModule.OnNewClientCreateHandler() - RecvStream is created by new allocator");
                     }
                     client_token.Initialize(Logger, Config.config_network, socket, 
-                                            mSendEventArgsPool.Get(), mRecvEventArgsPool.Get(), 
+                                            mClientSendEventArgsPool.Get(), mClientSendEventArgsPool.Get(), 
                                             send_stream_pool, recv_stream, token_id, OnCloseTokenHandler);
 
                     ClientUserTokenManager.TryAddUserToken(token_id, client_token);
@@ -319,6 +338,9 @@ namespace ServerEngine.Network.Server
                 }
                 catch (Exception ex) 
                 {
+                    if (null != client_token)
+                        mClientUserTokenPool.Return(client_token);
+
                     Logger.Error($"Exception in ServerModule.OnNewClientCreateHandler() - {ex.Message} - {ex.StackTrace}", ex);
                     return;
                 }
@@ -354,15 +376,15 @@ namespace ServerEngine.Network.Server
         public bool OnCloseTokenHandler(SocketAsyncEventArgs? send_event_args, SocketAsyncEventArgs? recv_event_args, SendStreamPool? send_stream_pool)
         {
             if (null != send_event_args)
-                mSendEventArgsPool.Return(send_event_args);
+                mClientSendEventArgsPool.Return(send_event_args);
 
             if (null != recv_event_args)
-                mRecvEventArgsPool.Return(recv_event_args);
+                mClientRecvEventArgsPool.Return(recv_event_args);
 
             if (null != send_stream_pool)
             {
                 send_stream_pool.Reset();
-                mSendStreamPoolStack.Push(send_stream_pool);
+                mClientSendStreamPoolStack.Push(send_stream_pool);
             }
 
             return true;

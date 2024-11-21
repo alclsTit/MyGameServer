@@ -99,10 +99,12 @@ namespace ServerEngine.Config
     #endregion
 
     #region ConfigNetwork
+    // Server 별로 network_config 존재 (ex:game, indun, manager..)
     public interface IConfigNetwork
     {
         public string name { get; }
-        public int max_io_thread_count { get; }
+        public int max_send_thread_count { get; }
+        public int max_recv_thread_count { get; }
 
         public List<IConfigListen> config_listen_list { get; }
         public IConfigSocket config_socket { get; }
@@ -112,7 +114,8 @@ namespace ServerEngine.Config
     public class DefaultConfigNetwork : IConfigNetwork
     {
         public string name { get; }
-        public int max_io_thread_count { get; }
+        public int max_send_thread_count { get; }
+        public int max_recv_thread_count { get; }
 
         public List<IConfigListen> config_listen_list { get; }
         public IConfigSocket config_socket { get; }
@@ -120,11 +123,12 @@ namespace ServerEngine.Config
 
         // 사용자정의 config 옵션멤버 추가
 
-        public DefaultConfigNetwork(string name, int max_io_thread_count, List<IConfigListen> config_listen_list, IConfigSocket config_socket, 
+        public DefaultConfigNetwork(string name, int max_send_thread_count, int max_recv_thread_count, List<IConfigListen> config_listen_list, IConfigSocket config_socket, 
                                     IConfigSession config_session)
         {
             this.name = name;
-            this.max_io_thread_count = max_io_thread_count;
+            this.max_send_thread_count = max_send_thread_count;
+            this.max_recv_thread_count = max_recv_thread_count;
             this.config_listen_list = config_listen_list;
             this.config_socket = config_socket;
             this.config_session = config_session;

@@ -20,10 +20,10 @@ namespace ServerEngine.Network.Message
         public SendWorker(IConfigNetwork config_network)
         {
             var config_socket = config_network.config_socket;
-            MaxIOThreadCount = config_network.max_io_thread_count;
+            MaxIOThreadCount = config_network.max_send_thread_count;
             SendQueueConcurrentDic = new ConcurrentDictionary<int, Channel<ArraySegment<byte>>>();
 
-            for (var i = 0; i < config_network.max_io_thread_count; ++i)
+            for (var i = 0; i < MaxIOThreadCount; ++i)
             {
                 var channel = Channel.CreateBounded<ArraySegment<byte>>(capacity: config_socket.send_buff_size);
                 SendQueueConcurrentDic.TryAdd(i, channel);
