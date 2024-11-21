@@ -126,16 +126,17 @@ namespace ServerEngine.Network.SystemLib
             }
             catch (Exception ex)
             {
-                Logger.Error($"Exception in TCPListener.Initialize() - {ex.Message} - {ex.StackTrace}", ex);
+                Logger.Error($"Exception in TcpAcceptor.Initialize() - {ex.Message} - {ex.StackTrace}", ex);
                 return false;
             }
         }
 
         public override bool Start()
         {
-            if (false == CheckState(eNetworkSystemState.Initialized))
+            if (false == CheckState(eNetworkSystemState.Initialized) && 
+                false == CheckState(eNetworkSystemState.StopComplete))
             {
-                Logger.Error($"Error in TcpAcceptor.Start() - TcpAcceptor can't start when state is [{(eNetworkSystemState)mState}]");
+                Logger.Error($"Error in TcpAcceptor.Start() - TcpAcceptor Can't Start Accept. state = [{(eNetworkSystemState)mState}]");
                 return false;
             }
 
@@ -144,7 +145,7 @@ namespace ServerEngine.Network.SystemLib
             mAcceptThread.Start();
 
             if (Logger.IsEnableDebug)
-                Logger.Debug($"TcpAccetor Start Complete");
+                Logger.Debug($"TcpAcceptor Start Complete");
 
             return true;
         }

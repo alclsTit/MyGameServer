@@ -57,6 +57,7 @@ namespace ServerEngine.Common
         /// 콘텐츠 타입에 따라서 생성된 UID 반환
         /// - 자릿수가 20자리를 넘어가므로 string 타입으로만 사용해야된다
         /// - 생성 규칙을 반드시 지켜야 한다
+        /// - GetString 로직은 thread-safe
         /// </summary>
         /// <returns></returns>
         public string GetString()

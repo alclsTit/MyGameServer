@@ -22,7 +22,6 @@ namespace ServerEngine.Network.SystemLib
     {
         private TcpSocket? mClientSocket;
         private IPEndPoint? mRemoteEndpoint;
-        private readonly object mLockObject = new object();
 
         #region property
         public string Name { get; private set; }
@@ -88,10 +87,10 @@ namespace ServerEngine.Network.SystemLib
 
             try
             {
-                var state = (eNetworkSystemState)mState;
-                if (eNetworkSystemState.None >= state)
+                if (false == CheckState(eNetworkSystemState.Initialized) && 
+                    false == CheckState(eNetworkSystemState.StopComplete))
                 {
-                    Logger.Error($"Error in TcpConnector.Start() - Can' Start Connect. state = {state}");
+                    Logger.Error($"Error in TcpConnector.Start() - TcpConnector Can' Start Connect. state = {(eNetworkSystemState)mState}");
                     return false;
                 }
 
@@ -127,15 +126,17 @@ namespace ServerEngine.Network.SystemLib
                 return;
             }
 
+            if (e.UserToken is null)
+            {
+                Logger.Error($"Error in TcpConnector.OnConnectCompleteHandler() - UserToken is null");
+                return;
+            }
+
             try
             {
-                mRemoteEndpoint = (IPEndPoint?)e.RemoteEndPoint;
-
-                if (e.UserToken is null)
-                {
-                    Logger.Error($"Error in TcpConnector.OnConnectCompleteHandler() - UserToken is null");
-                    return;
-                }
+                Interlocked.Exchange(ref mRemoteEndpoint, (IPEndPoint?)e.RemoteEndPoint);
+                if (null == mRemoteEndpoint)
+                    Logger.Error($"Error in TcpConnector.OnConnectCompleteHandler() - RemoteEndPoint is null");
 
                 // connection 완료시 UserToken 생성 및 해당 token에 대한 receive / send 로직 처리 진행
                 ServerModule.OnNewClientCreateHandler(e, true);
@@ -155,16 +156,22 @@ namespace ServerEngine.Network.SystemLib
             try
             {
                 var state = (eNetworkSystemState)mState;
-                if (true == base.CheckStop())
+                if (CheckStop())
                 {
                     Logger.Error($"Error in TcpConnector.Stop() - Stop process is already working. state = [{state}]");
+                    return;
+                }
+
+                if (null == Interlocked.CompareExchange(ref mClientSocket, null, null) || 
+                    true == mClientSocket?.IsNullSocket())
+                {
                     return;
                 }
 
                 UpdateState(eNetworkSystemState.Stopping);
 
                 if (true == mClientSocket?.GetSocket?.Connected)
-                    mClientSocket?.DisconnectSocket(SocketShutdown.Send);
+                    mClientSocket.Dispose(SocketShutdown.Send);
 
                 ConnectEventArgs?.Dispose();
 
@@ -173,6 +180,7 @@ namespace ServerEngine.Network.SystemLib
             catch (Exception ex)
             {
                 Logger.Error($"Exception in TcpConnector.Stop() - {ex.Message} - {ex.StackTrace}", ex);
+                return;
             }
         }
         #endregion
