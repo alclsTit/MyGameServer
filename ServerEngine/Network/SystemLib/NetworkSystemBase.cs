@@ -29,10 +29,18 @@ namespace ServerEngine.Network.SystemLib
             StopComplete = 4
         }
 
+        public enum eNetworkSystemType
+        {
+            None = 0,
+            Accept = 1,
+            Connect = 2
+        }
+
         /// <summary>
         /// 자신이 속한 서버모듈 
+        ///     - 순환참조되므로 약한 참조를 사용
         /// </summary>
-        public ServerModule ServerModule { get; protected set; }
+        public WeakReference<ServerModule> ServerModule { get; protected set; }
 
         /// <summary>
         /// 로거 클래스 
@@ -42,12 +50,17 @@ namespace ServerEngine.Network.SystemLib
         /// <summary>
         /// Accept 및 connect 상태
         /// </summary>
-        protected volatile int mState = (int)eNetworkSystemState.None;
+        protected volatile int mState;
 
-        protected NetworkSystemBase(Log.ILogger logger, ServerModule server_module)
+        /// <summary>
+        /// Connector, Acceptor 구분 필드
+        /// </summary>
+        public eNetworkSystemType mType;
+
+        protected NetworkSystemBase(Log.ILogger logger, ServerModule module)
         {
             this.Logger = logger;
-            ServerModule = server_module;
+            ServerModule = new WeakReference<ServerModule>(module);
         }
 
         public abstract bool Initialize();

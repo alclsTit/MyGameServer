@@ -19,6 +19,7 @@ using ServerEngine.Network.Message;
 using System.Linq.Expressions;
 using System.Collections.Concurrent;
 using System.Globalization;
+using System.Runtime.CompilerServices;
 
 namespace ServerEngine.Network.Server
 {
@@ -42,6 +43,12 @@ namespace ServerEngine.Network.Server
         }
     }*/
 
+    // 하이브리드 서버통신 진행 
+    //      - 클라이언트와의 통신을 위한 accept
+    //      - 서버와의 통신을 위한 connect
+    // [참고사항]
+    // 1. ServerModule 초기화 -> TcpAcceptor / TcpConnector 초기화 순으로 진행
+    // 2. ServerModule의 생명주기는 프로세스 생성과 종료
     public class ServerModule : IAsyncEventCallbackHandler
     {
         public enum eServerState : int
@@ -140,7 +147,7 @@ namespace ServerEngine.Network.Server
         public int GetState => mState;
     #endregion
 
-        public ServerModule(string name, Log.ILogger logger, IConfigCommon config, IAsyncEventCallbackHandler.AsyncEventCallbackHandler handler, List<NetworkSystemBase> acceptor)
+        public ServerModule(string name, Log.ILogger logger, IConfigCommon config, IAsyncEventCallbackHandler.AsyncEventCallbackHandler handler)
         {
             this.Name = name;
             this.Logger = logger;
@@ -213,9 +220,6 @@ namespace ServerEngine.Network.Server
 
             // Create UidGenerator
             mUidGenerators = new ConcurrentDictionary<UIDGenerator.eContentsType, UIDGenerator>();
-
-            // Accpetor (tcp / udp)
-            Acceptors = acceptor;
         }
 
         public virtual bool Initialize()
@@ -243,6 +247,21 @@ namespace ServerEngine.Network.Server
             }
 
             return true;
+        }
+
+        public void AddNetworkSystem(NetworkSystemBase networkSystem)
+        {
+            if (null == networkSystem)
+                throw new ArgumentNullException(nameof(networkSystem));
+
+            if (NetworkSystemBase.eNetworkSystemType.Accept != networkSystem.mType && 
+                NetworkSystemBase.eNetworkSystemType.Connect != networkSystem.mType)
+                throw new ArgumentException($"{nameof(networkSystem)} - Type: {networkSystem.mType}");
+
+            if (NetworkSystemBase.eNetworkSystemType.Accept == networkSystem.mType)
+                Acceptors.Add(networkSystem);
+            else if (NetworkSystemBase.eNetworkSystemType.Connect == networkSystem.mType)
+                Connectors.Add(networkSystem);
         }
 
         public void UpdateState(eServerState state)

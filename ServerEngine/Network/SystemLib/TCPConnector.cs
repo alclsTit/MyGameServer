@@ -34,6 +34,7 @@ namespace ServerEngine.Network.SystemLib
             : base(logger, module)
         {
             Name = name;
+            mType = eNetworkSystemType.Connect;
         }
 
         #region public_method
@@ -139,7 +140,14 @@ namespace ServerEngine.Network.SystemLib
                     Logger.Error($"Error in TcpConnector.OnConnectCompleteHandler() - RemoteEndPoint is null");
 
                 // connection 완료시 UserToken 생성 및 해당 token에 대한 receive / send 로직 처리 진행
-                ServerModule.OnNewClientCreateHandler(e, true);
+                if (ServerModule.TryGetTarget(out var module))
+                {
+                    module.OnNewClientCreateHandler(e, true);
+                }
+                else
+                {
+                    Logger.Error($"Error in TcpConnector.OnConnectCompleteHandler() - TcpConnector's ServerModule was disposed. Handler Call Error");
+                }
 
                 if (Logger.IsEnableDebug)
                     Logger.Debug($"Debug in TcpConnector.OnConnectCompleteHandler() - [{Name}][{mRemoteEndpoint?.Address}:{mRemoteEndpoint?.Port}] Server join Complete");

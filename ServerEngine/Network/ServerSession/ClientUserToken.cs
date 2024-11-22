@@ -37,9 +37,9 @@ namespace ServerEngine.Network.ServerSession
 
             try
             {
-                int max_io_thread_count = m_config_network.max_send_thread_count;
-                int user_per_thread = max_connection / max_io_thread_count;
-                for (var i = 0; i < max_io_thread_count; ++i)
+                int max_send_thread_count = m_config_network.max_send_thread_count;
+                int user_per_thread = max_connection / max_send_thread_count;
+                for (var i = 0; i < max_send_thread_count; ++i)
                     mThreadUserTokens.TryAdd(i, new List<ClientUserToken>(user_per_thread));
 
                 return true;
@@ -65,7 +65,7 @@ namespace ServerEngine.Network.ServerSession
                 throw new ArgumentNullException(nameof(uid));
 
             // uid의 일의 자리 값을 꺼낸다
-            // ex: max_io_thread_count가 4라면, 1 >> 1, 5 >> 1, 9 >> 1 
+            // ex: max_send_thread_count가 4라면, 1 >> 1, 5 >> 1, 9 >> 1 
             int index = uid_first_index % m_config_network.max_send_thread_count;
             mThreadUserTokens[index].Add(token);
 

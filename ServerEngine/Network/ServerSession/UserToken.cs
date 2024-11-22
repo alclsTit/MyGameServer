@@ -99,21 +99,26 @@ namespace ServerEngine.Network.ServerSession
         private IPEndPoint? mLocalEndPoint;
         private IPEndPoint? mRemoteEndPoint;
         private bool mDisposed = false;
-        private volatile bool mConnected = false;
+        private volatile int mConnected = 0;    // 0: false / 1: true
         private IConfigSocket? mConfigSocket;
         private IConfigNetwork? mConfigNetwork;
         private volatile int mCompleteFlag = 0; // 0: false / 1: true
+        // send backup queue
         private ConcurrentQueue<SendStream> mSendBackupQueue = new ConcurrentQueue<SendStream>();
         private Func<SocketAsyncEventArgs?, SocketAsyncEventArgs?, SendStreamPool?, bool>? mRetrieveEvent;
+        // heartbeat timer
         private System.Threading.Timer? mBackgroundTimer = null;
         private volatile int mHeartbeatCheckTime;
         private volatile int mLastHeartbeatCheckTime;
         private volatile int mHeartbeatCount;
 
         #region property
-        public string mTokenId { get; protected set; } = 0;
+        // user uid
+        public string mTokenId { get; protected set; } = string.Empty;
         public eTokenType TokenType { get; protected set; } = eTokenType.None;
+        // send queue
         protected Channel<SendStream>? SendQueue { get; private set; }
+        // socket
         public SocketBase Socket { get; protected set; }
         public Log.ILogger Logger { get; private set; }
 
@@ -121,14 +126,17 @@ namespace ServerEngine.Network.ServerSession
         public SocketAsyncEventArgs? RecvAsyncEvent { get; private set; }           // retrieve target
 
         // UserToken : 5000, pool_size = 10, send_buffer_size = 4KB > 서버당 204MB
-        public SendStreamPool? SendStreamPool { get; private set; }         
-     
+        // send에 사용되는 buffer를 담고있는 stream 객체풀
+        public SendStreamPool? SendStreamPool { get; private set; }
+
+        // recv handler
         public RecvMessageHandler? RecvMessageHandler { get; private set; }         // retrieve target
+        // packet parser
         public ProtoParser mProtoParser { get; private set; } = new ProtoParser();
 
         public IPEndPoint? GetLocalEndPoint => mLocalEndPoint;
         public IPEndPoint? GetRemoteEndPoint => mRemoteEndPoint;
-        public bool Connected => mConnected;
+        public bool Connected => mConnected == 0? false : true;
 
         public IConfigNetwork? GetConfigNetwork => mConfigNetwork;
         public IConfigSocket? GetConfigSocket => mConfigSocket;
@@ -152,13 +160,14 @@ namespace ServerEngine.Network.ServerSession
 
             mConfigSocket = config_network.config_socket;
 
+            // sending queue에 큐 최대사이즈를 지정하여 생성
             SendQueue = Channel.CreateBounded<SendStream>(capacity: config_network.config_socket.send_queue_size);
             SendStreamPool = send_stream_pool;
 
             //RecvMessageHandler = new RecvMessageHandler(max_buffer_size: config_socket.recv_buff_size, logger: logger);
             RecvMessageHandler = new RecvMessageHandler(stream: recv_stream, max_buffer_size: config_network.config_socket.recv_buff_size, logger: logger);
 
-            mConnected = true;
+            mConnected = 1;
 
             mRetrieveEvent = retrieve_event;
 
@@ -704,7 +713,8 @@ namespace ServerEngine.Network.ServerSession
             // Dispose send/recv socketasynceventargs
             mRetrieveEvent?.Invoke(SendAsyncEvent, RecvAsyncEvent, SendStreamPool);
 
-            mConnected = false;
+            Interlocked.Exchange(ref mConnected, 0);
+
             TokenType = eTokenType.None;
 
             // Todo : SendQueue에 보내야할 데이터가 남아있을 때 처리작업 필요

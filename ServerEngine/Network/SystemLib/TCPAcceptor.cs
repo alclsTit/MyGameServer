@@ -55,7 +55,9 @@ namespace ServerEngine.Network.SystemLib
         public TcpAcceptor(string name, Log.ILogger logger, ServerModule module) 
             : base(logger, module)
         {
-            Name = name;    
+            Name = name;
+            mType = eNetworkSystemType.Accept;
+
             mAcceptThread = new Thread(() => { StartAccept(); });
         }
 
@@ -228,7 +230,14 @@ namespace ServerEngine.Network.SystemLib
                 }
 
                 // connection 완료시 UserToken 생성 및 해당 token에 대한 receive / send 로직 처리 진행
-                ServerModule.OnNewClientCreateHandler(e, false);        
+                if (ServerModule.TryGetTarget(out var module))
+                {
+                    module.OnNewClientCreateHandler(e, false);        
+                }
+                else
+                {
+                    Logger.Error($"Error in TcpAcceptor.OnAcceptCompleteHandler() - TcpAcceptor's ServerModule was disposed. Handler Call Error");
+                }
 
                 mThreadBlockEvent.Set();
 
