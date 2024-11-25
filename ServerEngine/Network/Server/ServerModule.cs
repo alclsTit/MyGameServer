@@ -94,6 +94,11 @@ namespace ServerEngine.Network.Server
         /// </summary>
         private ConcurrentDictionary<UIDGenerator.eContentsType, UIDGenerator> mUidGenerators;
 
+        /// <summary>
+        /// protobuf message parser lock object
+        /// </summary>
+        private object m_proto_parser_lock = new object();
+
     #region property
         /// <summary>
         /// server_module endpoint
@@ -220,6 +225,7 @@ namespace ServerEngine.Network.Server
 
             // Create UidGenerator
             mUidGenerators = new ConcurrentDictionary<UIDGenerator.eContentsType, UIDGenerator>();
+
         }
 
         public virtual bool Initialize()
@@ -247,6 +253,22 @@ namespace ServerEngine.Network.Server
             }
 
             return true;
+        }
+
+        public virtual bool InitializeProtoMessageParsers()
+        {
+            if (ProtoMessageParser.GetInitializeFlag())
+                return false;
+
+            lock (m_proto_parser_lock)
+            {
+                ProtoMessageParser.InitializeClientMessageParsers();
+                ProtoMessageParser.InitializeServerMessageParsers();
+
+                ProtoMessageParser.SetInitializeFlag(true);
+
+                return true;
+            }
         }
 
         public void AddNetworkSystem(NetworkSystemBase networkSystem)

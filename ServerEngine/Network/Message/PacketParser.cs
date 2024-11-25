@@ -7,47 +7,111 @@ using System.IO;
 using NetworkEngineMessage;
 using Google.Protobuf;
 using ServerEngine.Common;
+using System.Configuration;
 
 namespace ServerEngine.Network.Message
 {
+    // 서버에서 사용하는 MessageParser 전역처리 
+    //  - Deserialize 진행시 생성 및 파괴를 통한 과도한 GC 발생되는 것을 방지
+    //  - 메모리 효율성
+    public static class ProtoMessageParser
+    {
+        private enum eMessageType
+        {
+            Client = 0,
+            Server = 1
+        }
+
+        private static bool m_initialized = false;
+        private static readonly int m_client_index = (int)eMessageType.Client;
+        private static readonly int m_server_index = (int)eMessageType.Server;
+
+        // 0: client message
+        // 1: server message
+        private static readonly List<Dictionary<ushort, MessageParser>> m_parsers = new List<Dictionary<ushort, MessageParser>>()
+        {
+            new Dictionary<ushort, MessageParser>(),    // client parser
+            new Dictionary<ushort, MessageParser>()     // server parser
+        };
+
+        public static MessageParser? GetClientParser(ushort message_id) => GetParser(m_client_index, message_id);
+        public static MessageParser? GetServerParser(ushort message_id) => GetParser(m_server_index, message_id);
+
+        public static void InitializeClientMessageParsers()
+        {
+            //AddClientMessageParser(message_id: message_id.CpePingPongCs);
+            //AddClientMessageParser(message_id: message_id.CpePingPongSc);
+        }
+
+        public static void InitializeServerMessageParsers()
+        {
+            AddServerMessageParser(message_id: message_id.SpePingPongCs);
+            AddServerMessageParser(message_id: message_id.SpePingPongSc);
+        }
+
+        public static void AddClientMessageParser<TMessage>(ushort message_id)
+            where TMessage : IMessage<TMessage>, new()
+        {
+            m_parsers[m_client_index].Add(message_id, new MessageParser<TMessage>(() => new TMessage()));
+        }
+
+        public static void AddServerMessageParser<TMessage>(ushort message_id)
+            where TMessage : IMessage<TMessage>, new()
+        {
+            m_parsers[m_server_index].Add(message_id, new MessageParser<TMessage>(() => new TMessage()));
+        }
+
+        private static MessageParser? GetParser(int index, ushort message_id)
+        {
+            return m_parsers[index].TryGetValue(message_id, out var parser) ? parser : null;
+        }
+
+        public static void SetInitializeFlag(bool flag)
+        {
+            m_initialized = flag;
+        }
+
+        public static bool GetInitializeFlag()
+        {
+            return m_initialized;
+        }
+    }
+
     // Protobuf 관련 직렬화 / 역직렬화 
     public class ProtoParser
     {
+        // serialize protobuf message 
+        //  - 내부에서 버퍼 생성 및 해당 버퍼에 메시지 직렬화
         public ArraySegment<byte> Serialize<TMessage>(TMessage message, ushort message_id) where TMessage : IMessage
         {
             if (null == message)
                 throw new ArgumentNullException(nameof(message));
 
-            if (message_id < 0 || message_id > Utility.MAX_PACKET_DEFINITION_SIZE)
+            if (message_id > Utility.MAX_PACKET_DEFINITION_SIZE)
                 throw new ArgumentOutOfRangeException(nameof(message_id));
 
-            try
-            {
-                var header_size = Utility.MAX_PACKET_HEADER_SIZE + Utility.MAX_PACKET_HEADER_TYPE;
-                var body_size = message.CalculateSize();
-                var packet_size = header_size + body_size;
-                var buffer = new ArraySegment<byte>(new byte[packet_size]);
-                int offset = 0;
-                
-                if (null == buffer.Array)
-                    throw new NullReferenceException(nameof(buffer.Array));
+            var header_size = Utility.MAX_PACKET_HEADER_SIZE + Utility.MAX_PACKET_HEADER_TYPE;
+            var body_size = message.CalculateSize();
+            var packet_size = header_size + body_size;
+            var buffer = new ArraySegment<byte>(new byte[packet_size]);
+            int offset = 0;
 
-                Buffer.BlockCopy(BitConverter.GetBytes(header_size), 0, buffer.Array, offset, Utility.MAX_PACKET_HEADER_SIZE);
-                offset += Utility.MAX_PACKET_HEADER_SIZE;
+            if (null == buffer.Array)
+                throw new NullReferenceException(nameof(buffer.Array));
 
-                Buffer.BlockCopy(BitConverter.GetBytes(message_id), 0, buffer.Array, offset, Utility.MAX_PACKET_HEADER_TYPE);
-                offset += Utility.MAX_PACKET_HEADER_TYPE;
+            Buffer.BlockCopy(BitConverter.GetBytes(header_size), 0, buffer.Array, offset, Utility.MAX_PACKET_HEADER_SIZE);
+            offset += Utility.MAX_PACKET_HEADER_SIZE;
 
-                Buffer.BlockCopy(message.ToByteArray(), 0, buffer.Array, offset, body_size);
+            Buffer.BlockCopy(BitConverter.GetBytes(message_id), 0, buffer.Array, offset, Utility.MAX_PACKET_HEADER_TYPE);
+            offset += Utility.MAX_PACKET_HEADER_TYPE;
 
-                return buffer;
-            }
-            catch (Exception)
-            {
-                throw;
-            }
+            Buffer.BlockCopy(message.ToByteArray(), 0, buffer.Array, offset, body_size);
+
+            return buffer;
         }
 
+        // serialize protobuf message
+        //  - 전달받은 Stream 객체의 버퍼에 메시지 직렬화
         public ArraySegment<byte> Serialize<TMessage>(TMessage message, ushort message_id, SendStream stream) where TMessage : IMessage
         {
 
@@ -60,32 +124,27 @@ namespace ServerEngine.Network.Message
             if (null == stream.Buffer.Array)
                 throw new ArgumentNullException(nameof(stream.Buffer.Array));
 
-            try
-            {
-                var header_size = Utility.MAX_PACKET_HEADER_SIZE + Utility.MAX_PACKET_HEADER_TYPE;
-                var body_size = message.CalculateSize();
-                var packet_size = header_size + body_size;
-                int offset = 0;
+            var header_size = Utility.MAX_PACKET_HEADER_SIZE + Utility.MAX_PACKET_HEADER_TYPE;
+            var body_size = message.CalculateSize();
+            var packet_size = header_size + body_size;
+            int offset = 0;
 
-                if (stream.Buffer.Array.Length < packet_size)
-                    throw new InvalidOperationException("SendStream.Buffer is too small for the serialized packet");
+            if (stream.Buffer.Array.Length < packet_size)
+                throw new InvalidOperationException("SendStream.Buffer is too small for the serialized packet");
 
-                Buffer.BlockCopy(BitConverter.GetBytes(header_size), 0, stream.Buffer.Array, offset, Utility.MAX_PACKET_HEADER_SIZE);
-                offset += Utility.MAX_PACKET_HEADER_SIZE;
+            Buffer.BlockCopy(BitConverter.GetBytes(header_size), 0, stream.Buffer.Array, offset, Utility.MAX_PACKET_HEADER_SIZE);
+            offset += Utility.MAX_PACKET_HEADER_SIZE;
 
-                Buffer.BlockCopy(BitConverter.GetBytes(message_id), 0, stream.Buffer.Array, offset, Utility.MAX_PACKET_HEADER_TYPE);
-                offset += Utility.MAX_PACKET_HEADER_TYPE;
+            Buffer.BlockCopy(BitConverter.GetBytes(message_id), 0, stream.Buffer.Array, offset, Utility.MAX_PACKET_HEADER_TYPE);
+            offset += Utility.MAX_PACKET_HEADER_TYPE;
 
-                Buffer.BlockCopy(message.ToByteArray(), 0, stream.Buffer.Array, offset, body_size);
+            Buffer.BlockCopy(message.ToByteArray(), 0, stream.Buffer.Array, offset, body_size);
 
-                return stream.Buffer;
-            }
-            catch (Exception)
-            {
-                throw;
-            }          
+            return stream.Buffer;
         }
 
+        // check and set. serialize protobuf message.
+        //  - 전달받은 Stream 객체의 버퍼에 메시지 직렬화 및 결과 반환
         public bool TrySerialize<TMessage>(TMessage message, ushort message_id, SendStream stream, int offset = 0) where TMessage: IMessage
         {
             if (null == message)
@@ -97,59 +156,58 @@ namespace ServerEngine.Network.Message
             if (null == stream.Buffer.Array)
                 throw new ArgumentNullException(nameof(stream.Buffer.Array));
 
-            try
-            {
-                var header_size = Utility.MAX_PACKET_HEADER_SIZE + Utility.MAX_PACKET_HEADER_TYPE;
-                var body_size = message.CalculateSize();
-                var packet_size = header_size + body_size;
+            var header_size = Utility.MAX_PACKET_HEADER_SIZE + Utility.MAX_PACKET_HEADER_TYPE;
+            var body_size = message.CalculateSize();
+            var packet_size = header_size + body_size;
 
-                if (stream.Buffer.Array.Length < packet_size)
-                    throw new InvalidOperationException("SendStream.Buffer is too small for the serialized packet");
+            if (stream.Buffer.Array.Length < packet_size)
+                throw new InvalidOperationException("SendStream.Buffer is too small for the serialized packet");
 
-                Buffer.BlockCopy(BitConverter.GetBytes(header_size), 0, stream.Buffer.Array, offset, Utility.MAX_PACKET_HEADER_SIZE);
-                offset += Utility.MAX_PACKET_HEADER_SIZE;
+            Buffer.BlockCopy(BitConverter.GetBytes(header_size), 0, stream.Buffer.Array, offset, Utility.MAX_PACKET_HEADER_SIZE);
+            offset += Utility.MAX_PACKET_HEADER_SIZE;
 
-                Buffer.BlockCopy(BitConverter.GetBytes(message_id), 0, stream.Buffer.Array, offset, Utility.MAX_PACKET_HEADER_TYPE);
-                offset += Utility.MAX_PACKET_HEADER_TYPE;
+            Buffer.BlockCopy(BitConverter.GetBytes(message_id), 0, stream.Buffer.Array, offset, Utility.MAX_PACKET_HEADER_TYPE);
+            offset += Utility.MAX_PACKET_HEADER_TYPE;
 
-                Buffer.BlockCopy(message.ToByteArray(), 0, stream.Buffer.Array, offset, body_size);
+            Buffer.BlockCopy(message.ToByteArray(), 0, stream.Buffer.Array, offset, body_size);
 
-                return true;
-            }
-            catch (Exception)
-            {
-                throw;
-            }
+            return true;
         }
 
-
         // proto 파일 컨버팅시 생성되는 message는 기본생성자를 포함하고 있다 > new() 제약조건 가능 
-        public TMessage Deserialize<TMessage>(ref ArraySegment<byte> buffer) where TMessage : IMessage<TMessage>, new()
+        // deserialize protobuf message
+        //  - 전달받은 버퍼에 담긴 데이터를 메시지로 역직렬화
+        public TMessage Deserialize<TMessage>(bool client_message, ref ArraySegment<byte> buffer) 
+            where TMessage : IMessage<TMessage>, new()
         {
             if (null == buffer.Array)
                 throw new ArgumentNullException(nameof(buffer));
 
-            try
-            {
-                int offset = 0;
-                var read_span = new ReadOnlySpan<byte>(buffer.Array, buffer.Offset, buffer.Count);
+            int offset = 0;
+            var read_span = new ReadOnlySpan<byte>(buffer.Array, buffer.Offset, buffer.Count);
 
-                var packet_size = BitConverter.ToUInt16(read_span.Slice(offset, Utility.MAX_PACKET_HEADER_SIZE));
-                offset += Utility.MAX_PACKET_HEADER_SIZE;
+            var packet_size = BitConverter.ToUInt16(read_span.Slice(offset, Utility.MAX_PACKET_HEADER_SIZE));
+            offset += Utility.MAX_PACKET_HEADER_SIZE;
 
-                var message_id = BitConverter.ToUInt16(read_span.Slice(offset, Utility.MAX_PACKET_HEADER_TYPE));
-                offset += Utility.MAX_PACKET_HEADER_TYPE;
+            var message_id = BitConverter.ToUInt16(read_span.Slice(offset, Utility.MAX_PACKET_HEADER_TYPE));
+            offset += Utility.MAX_PACKET_HEADER_TYPE;
 
-                var header_size = Utility.MAX_PACKET_HEADER_SIZE + Utility.MAX_PACKET_HEADER_TYPE;
-                var body_size = packet_size - header_size;
+            var header_size = Utility.MAX_PACKET_HEADER_SIZE + Utility.MAX_PACKET_HEADER_TYPE;
+            var body_size = packet_size - header_size;
 
-                var parser = new MessageParser<TMessage>(() => new TMessage());
-                return parser.ParseFrom(buffer.Array, header_size, body_size);
-            }
-            catch (Exception)
-            {
-                throw;
-            }
+            if (body_size <= 0)
+                throw new InvalidOperationException($"Invalid packet size. size = {packet_size}, header = {header_size},7uk body = {body_size}");
+
+            //var parser = new MessageParser<TMessage>(() => new TMessage());
+            //return parser.ParseFrom(buffer.Array, header_size, body_size);
+            var parser = client_message
+                         ? ProtoMessageParser.GetClientParser(message_id)
+                         : ProtoMessageParser.GetServerParser(message_id);
+
+            if (parser == null)
+                throw new InvalidOperationException($"Invalid packet type. Message ID: {message_id}, Client: {(client_message ? "True" : "False")}");
+
+            return (TMessage)parser.ParseFrom(buffer.Array, header_size, body_size);
         }
     }
 
