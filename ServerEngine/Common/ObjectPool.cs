@@ -53,15 +53,16 @@ namespace ServerEngine.Common
     public class DisposableObjectPool<T> : DefaultObjectPool<T>, IDisposable where T : class, IDisposable
     {
         private ConcurrentBag<T> m_pools;
-        private bool m_disposed = false;
-
-        private volatile int m_count = 0;
         private int m_capacity = 0;
+        
+        private volatile int m_disposed = 0;
+        private volatile int m_count = 0;
 
         #region property
         // thread-safe (volatile read)
         public int Count => m_count;
         public int Capacity => m_capacity;
+        public bool IsDisposed => 0 == m_disposed ? false : true;
         #endregion
 
         public DisposableObjectPool(IPooledObjectPolicy<T> policy, int maximumRetained) 
@@ -73,6 +74,9 @@ namespace ServerEngine.Common
 
         public new T Get()
         {
+            if (IsDisposed)
+                throw new ObjectDisposedException(nameof(DisposableObjectPool<T>));
+
             var item = base.Get();
             m_pools.Add(item);
 
@@ -83,22 +87,26 @@ namespace ServerEngine.Common
 
         public new void Return(T obj)
         {
+            if (IsDisposed)
+                throw new ObjectDisposedException(nameof(DisposableObjectPool<T>));
+
             Interlocked.Decrement(ref m_count);
 
+            // **Todo: obj에 대한 reset 필요
             base.Return(obj);
         }
 
         public virtual void Dispose()
         {
-            if (m_disposed)
-                return;
+            if (IsDisposed)
+                throw new ObjectDisposedException(nameof(DisposableObjectPool<T>));
 
             foreach (var item in m_pools)
                 item.Dispose();
 
             m_pools.Clear();
 
-            m_disposed = true;
+            Interlocked.Exchange(ref m_disposed, 1);
         }
     }
     #endregion
