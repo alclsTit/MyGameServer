@@ -439,6 +439,8 @@ namespace ServerEngine.Network.ServerSession
                     // Channel 닫기
                     SendQueue.Writer.Complete();
 
+                    // 비동기 스트림 읽기. Channel에 데이터가 추가될 때마다 대기하지 않고 데이터를 차례로 읽어온다. 추가 대기 없이 남아있는 데이터를 읽는다
+                    // Channel이 이미 닫힌 상태에서 비동기 스트림 데이터를 cpu 제어권을 갖고 즉시 읽어온 뒤 finally 구문이 실행된다
                     await foreach(var item in SendQueue.Reader.ReadAllAsync())
                         SendAsyncEvent.BufferList?.Add(item.Buffer);
                 }
