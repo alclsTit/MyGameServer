@@ -275,7 +275,7 @@ namespace ServerEngine.Network.ServerSession
         }
 
         // protobuf 형식의 메시지를 받아 직렬화한 뒤 비동기로 메시지 큐잉
-        public virtual async ValueTask SendAsync<TMessage>(TMessage message, ushort message_id, CancellationToken canel_token) 
+        public virtual async Task SendAsync<TMessage>(TMessage message, ushort message_id, CancellationToken canel_token) 
             where TMessage : IMessage
         {
             if (null == SendStreamPool)
@@ -284,25 +284,51 @@ namespace ServerEngine.Network.ServerSession
                 return;
             }
 
+            bool result = false;
+            SendStream stream = SendStreamPool.Get();
             try
             {
-                SendStream stream = SendStreamPool.Get();
                 if (mProtoParser.TrySerialize(message: message,
                                               message_id: message_id,        
                                               stream: stream))
                 {
-                    await StartSendAsync(stream: stream, cancel_token: canel_token);
+                    // I/O 작업으로 인해 대기시간이 길게 발생할 수 있어 반환타입으로 ValueTask -> Task로 수정
+                    result = await StartSendAsync(stream: stream, cancel_token: canel_token);
                 }
                 else
                 {
                     Logger.Error($"Error in UserToken.SendAsync() - Fail to Serialize");
-                    return;
                 }
             }
             catch (Exception ex)
             {
                 Logger.Error($"Exception in UserToken.SendAsync() - {ex.Message} - {ex.StackTrace}");
-                return;
+            }
+            finally
+            {
+                if (!result) SendStreamPool.Return(stream);
+            }
+        }
+
+        private void InternalSend(SendStream stream)
+        {
+            bool internal_result = false;
+            try
+            {
+                if (null == SendQueue)
+                    throw new NullReferenceException(nameof(SendQueue));
+
+                internal_result = SendQueue.Writer.TryWrite(item: stream);
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"Warning in UserToken.InternalSend() - Fail to Channel.Writer.TryWrite(). exception = {ex.Message}." +
+                            $"SendStream = {Newtonsoft.Json.JsonConvert.SerializeObject(stream, Newtonsoft.Json.Formatting.Indented)}. stack_trace = {ex.StackTrace}");
+            }
+            finally
+            {
+                // Todo: 지속적으로 실패하여 백업 큐에 저장되는 대상에 대한 retry 처리 필요
+                if (!internal_result) mSendBackupQueue.Enqueue(item: stream);
             }
         }
 
@@ -321,33 +347,15 @@ namespace ServerEngine.Network.ServerSession
             // mCompleteFlag = false 일 때만 queue에 데이터 추가
             if (0 == Interlocked.CompareExchange(ref mCompleteFlag, 0, 0))
             {
-                // send backup queue에 데이터가 있는지 없는지 확인하고 있다면, sending queue에 해당 데이터를 추가
-                while(false == mSendBackupQueue.IsEmpty)
+                // 백업 큐에 데이터가 있는지 확인하고 송신 큐에 해당 데이터를 추가
+                while (!mSendBackupQueue.IsEmpty)
                 {
-                    SendStream? backup_stream = null;
-                    if (mSendBackupQueue.TryDequeue(out backup_stream))
-                    {
-                        if (false == SendQueue.Writer.TryWrite(item: backup_stream))
-                        {
-                            Logger.Warn($"Warning in UserToken.StartSend() - Fail to Channel.Writer.TryWrite()." +
-                                        $" backup_stream = {Newtonsoft.Json.JsonConvert.SerializeObject(backup_stream, Newtonsoft.Json.Formatting.Indented)}");
-
-                            // while 문의 바쁜대기를 고려하여 delay를 부여 
-                            Task.Delay(5).Wait();
-                            mSendBackupQueue.Enqueue(backup_stream);
-                            continue;
-                        }
-                    }
+                    if (mSendBackupQueue.TryDequeue(out var backup_stream))
+                        InternalSend(backup_stream);
                 }
 
-                if (false == SendQueue.Writer.TryWrite(item: stream))
-                {
-                    // channel에 데이터 추가가 실패하면 backup queue에 추가하여 이후에 처리한다
-                    mSendBackupQueue.Enqueue(stream);
-                    
-                    Logger.Warn($"Warning in UserToken.StartSend() - Fail to Channel.Writer.TryWrite()." +
-                                $" stream = {Newtonsoft.Json.JsonConvert.SerializeObject(stream, Newtonsoft.Json.Formatting.Indented)}");               
-                }
+                // 일반적인 데이터 송신을 위한 송신 큐에 데이터 추가
+                InternalSend(stream);
             }
             else
             {
@@ -357,9 +365,29 @@ namespace ServerEngine.Network.ServerSession
             return true;
         }
 
+        private async Task InternalSendAsync(SendStream stream, CancellationToken cancel_token)
+        {
+            try
+            {
+                if (null == SendQueue) 
+                    throw new NullReferenceException(nameof(SendQueue));
+
+               await SendQueue.Writer.WriteAsync(item: stream, cancellationToken: cancel_token);
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"Warning in UserToken.InternalSendAsync() - Fail to Channel.Writer.WriteAsync(). exception = {ex.Message}." +
+                            $"SendStream = {Newtonsoft.Json.JsonConvert.SerializeObject(stream, Newtonsoft.Json.Formatting.Indented)}. stack_trace = {ex.StackTrace}");
+
+                // 쓰기에 실패하면 백업 큐에 다시 저장
+                // Todo: 지속적으로 실패하여 백업 큐에 저장되는 대상에 대한 retry 처리 필요
+                mSendBackupQueue.Enqueue(item: stream);
+            }
+        }
+
         // 여러 스레드에서 호출. 패킷 send 진행 시 큐에 비동기로 데이터 추가
         // SocketAsyncEventArgs 비동기 객체를 사용하지 않음
-        private ValueTask<bool> StartSendAsync(SendStream stream, CancellationToken cancel_token)
+        private async Task<bool> StartSendAsync(SendStream stream, CancellationToken cancel_token)
         {
             if (null == stream.Buffer.Array)
                 throw new ArgumentNullException(nameof(stream.Buffer.Array));
@@ -372,79 +400,70 @@ namespace ServerEngine.Network.ServerSession
             // mCompleteFlag = false 일 때만 queue에 데이터 추가
             if (0 == Interlocked.CompareExchange(ref mCompleteFlag, 0, 0))
             {
-                // send backup queue에 데이터가 있는지 없는지 확인하고 있다면, sending queue에 해당 데이터를 추가
-                while (false == mSendBackupQueue.IsEmpty)
+                // 백업 큐에 데이터가 있는지 확인하고 송신 큐에 해당 데이터를 추가
+                while (!mSendBackupQueue.IsEmpty) 
                 {
-                    SendStream? backup_stream;
-                    if (mSendBackupQueue.TryPeek(out backup_stream))
-                    {
-                        try
-                        {
-                            SendQueue.Writer.WriteAsync(item: backup_stream, cancellationToken: cancel_token);
-                            
-                            mSendBackupQueue.TryDequeue(out backup_stream);
-                        }
-                        catch (Exception ex)
-                        {
-                            Logger.Warn($"Warning in UserToken.StartSendAsync() - Fail to Channel.Writer.WriteAsync(). exception = {ex.Message}." +
-                                        $"backup_stream = {Newtonsoft.Json.JsonConvert.SerializeObject(backup_stream, Newtonsoft.Json.Formatting.Indented)}. stack_trace = {ex.StackTrace}");
-
-                            // while 문의 바쁜대기를 고려하여 delay를 부여 
-                            Task.Delay(5).WaitAsync(cancellationToken: cancel_token);
-                        }
-                    }
+                    if (mSendBackupQueue.TryDequeue(out var backup_stream))
+                        await InternalSendAsync(stream: backup_stream, cancel_token: cancel_token);
                 }
 
-                try
-                {
-                    SendQueue.Writer.WriteAsync(item: stream, cancellationToken: cancel_token);
-                }
-                catch (Exception ex)
-                {
-                    mSendBackupQueue.Enqueue(item: stream);
-                    Logger.Warn($"Warning in UserToken.StartSendAsync() - Fail to Channel.Writer.WriteAsync(). exception = {ex.Message}. " +
-                                $"stream = {Newtonsoft.Json.JsonConvert.SerializeObject(stream, Newtonsoft.Json.Formatting.Indented)}. stack_trace = {ex.StackTrace}");
-                }
+                // 일반적인 데이터 송신을 위한 송신 큐에 데이터 추가
+                await InternalSendAsync(stream: stream, cancel_token: cancel_token);
             }
             else
             {
+                // Channl이 아직 생성되지 않은 경우 백업 큐에 데이터를 보관 
                 mSendBackupQueue.Enqueue(stream);
             }
 
-            return ValueTask.FromResult(true);
+            return true;
         }
 
         // 별도의 패킷 처리 스레드에서 호출. 큐잉된 패킷 데이터들에 대한 실질적인 비동기 send 진행
         // io_thread가 5개일 경우 5개의 스레드에서 각 호출
-        public virtual async ValueTask ProcessSendAsync()
+        public virtual async Task ProcessSendAsync()
         {
-            if (false == Connected)
-                return;
-
-            if (null == SendQueue)
-                return;
-
-            if (null == SendAsyncEvent)
+            if (!Connected || null == SendQueue || null == SendAsyncEvent)
                 return;
 
             // 해당 메서드가 호출되는 순간 Channel.Writer를 Complete로 변경. 더 이상 queue에 데이터 추가가 안됨
             if (0 == Interlocked.CompareExchange(ref mCompleteFlag, 1, 0))
             {
-                SendQueue.Writer.Complete();
-           
-                await foreach(var item in SendQueue.Reader.ReadAllAsync())
-                    SendAsyncEvent.BufferList?.Add(item.Buffer);
+                try
+                {
+                    // Channel 닫기
+                    SendQueue.Writer.Complete();
 
-                //channel의 complete 호출시 해당 channel을 재사용하는것이 아닌 새로운 channel을 생성하여 이후로직을 처리
-                //mCompleteFlag = 0;
-                if (null != mConfigSocket)
-                    SendQueue = Channel.CreateBounded<SendStream>(capacity: mConfigSocket.send_buff_size);
-                else
-                    SendQueue = Channel.CreateBounded<SendStream>(capacity: Utility.MAX_SEND_BUFFER_SIZE_COMMON);
+                    await foreach(var item in SendQueue.Reader.ReadAllAsync())
+                        SendAsyncEvent.BufferList?.Add(item.Buffer);
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error($"UserToken.ProcessSendAsync() - {ex.Message} - {ex.StackTrace}");
+                }
+                finally
+                {
+                    //channel의 complete 호출시 해당 channel을 재사용하는것이 아닌 새로운 channel을 생성하여 이후로직을 처리
+                    if (null != mConfigSocket)
+                        SendQueue = Channel.CreateBounded<SendStream>(capacity: mConfigSocket.send_buff_size);
+                    else
+                        SendQueue = Channel.CreateBounded<SendStream>(capacity: Utility.MAX_SEND_BUFFER_SIZE_COMMON);
 
+                    // mCompleteFlag = false로 변경하여 송신 큐에 데이터를 담을 수 있도록 변경
+                    Interlocked.Exchange(ref mCompleteFlag, 0);         
+                }
+            }
+            
+            // 비동기 송신
+            try
+            {
                 var pending = Socket.GetSocket?.SendAsync(SendAsyncEvent);
                 if (false == pending)
                     OnSendCompleteHandler(null, SendAsyncEvent);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Exception in UserToken.ProcessSendAsync() - {ex.Message} - {ex.StackTrace}");
             }
         }
 
