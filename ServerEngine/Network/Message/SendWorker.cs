@@ -41,7 +41,7 @@ namespace ServerEngine.Network.Message
             SendQueueConcurrentDic[index].Writer.TryWrite(buffer);
         }
 
-        public ValueTask AddAsync(ArraySegment<byte> buffer, int index)
+        public async Task AddAsync(ArraySegment<byte> buffer, int index)
         {
             if (null == buffer.Array)
                 throw new ArgumentNullException(nameof(buffer));
@@ -49,7 +49,7 @@ namespace ServerEngine.Network.Message
             if (index < 0 || index > MaxIOThreadCount)
                 throw new ArgumentException(nameof(index));
 
-            return SendQueueConcurrentDic[index].Writer.WriteAsync(buffer);
+            await SendQueueConcurrentDic[index].Writer.WriteAsync(buffer);
         }
 
         public bool Process(int index, [NotNullWhen(true)] out ArraySegment<byte>? buffer)

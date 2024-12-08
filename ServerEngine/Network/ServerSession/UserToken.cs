@@ -252,26 +252,31 @@ namespace ServerEngine.Network.ServerSession
                 return false;
             }
 
+            bool result = false;
+            SendStream stream = SendStreamPool.Get();
             try
             {
-                SendStream stream = SendStreamPool.Get();
                 if (mProtoParser.TrySerialize(message: message,
                                               message_id: message_id,
                                               stream: stream))
                 {
-                    return StartSend(stream);
+                    result = StartSend(stream);
                 }
                 else
                 {
                     Logger.Error($"Error in UserToken.Send() - Fail to Serialize");
-                    return false;
                 }
             }
             catch (Exception ex)
             {
                 Logger.Error($"Exception in UserToken.Send() - {ex.Message} - {ex.StackTrace}");
-                return false;
             }
+            finally
+            {
+                if (!result) SendStreamPool.Return(stream);
+            }
+
+            return result;
         }
 
         // protobuf 형식의 메시지를 받아 직렬화한 뒤 비동기로 메시지 큐잉
@@ -439,7 +444,7 @@ namespace ServerEngine.Network.ServerSession
                 }
                 catch (Exception ex)
                 {
-                    Logger.Error($"UserToken.ProcessSendAsync() - {ex.Message} - {ex.StackTrace}");
+                    Logger.Error($"Exception in UserToken.ProcessSendAsync() - {ex.Message} - {ex.StackTrace}");
                 }
                 finally
                 {

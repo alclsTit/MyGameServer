@@ -84,7 +84,7 @@ namespace ServerEngine.Network.ServerSession
             return false;
         }
 
-        public async ValueTask Run(int index)
+        public async Task Run(int index)
         {
             if (0 > index || m_config_network.max_send_thread_count < index)
                 throw new ArgumentException($"Index {index}");
